@@ -102,36 +102,29 @@ def extrair_parcelas(bloco: str):
         i += 1
     return itens
 
-# ==== Função de Processamento Principal (COM A CORREÇÃO) ====
+# ==== Função de Processamento Principal ====
 def processar_pdf(texto_pdf: str, emp: str):
     VALORES_CORRETOS = fixos_do_emp(emp)
     texto_pdf = texto_pdf.replace("Total Geral..: 357.917,14", "")
     blocos = fatiar_blocos(texto_pdf)
     
-    # --- NOVA LÓGICA DE CORREÇÃO ---
-    # 1. Primeiro, identifica todos os nomes de clientes em ordem
     nomes_clientes = [tentar_nome_cliente(bloco_texto) for lote, bloco_texto in blocos]
     
     linhas_todas, linhas_cov, linhas_div = [], [], []
-    # 2. Itera sobre os blocos com um índice
     for i, (lote, bloco) in enumerate(blocos):
         cliente = nomes_clientes[i]
         
         bloco_corrigido = bloco
         
-        # 3. Se houver um próximo bloco, usa o nome do próximo cliente como "marcador de corte"
         if (i + 1) < len(nomes_clientes):
             proximo_cliente = nomes_clientes[i+1]
             if proximo_cliente != "Nome não localizado":
                 posicao_corte = bloco.find(proximo_cliente)
                 if posicao_corte > 0:
-                    # 4. Corta o bloco atual para evitar que ele contenha dados do próximo
                     bloco_corrigido = bloco[:posicao_corte]
         
-        # 5. Continua o processo usando o bloco de texto corrigido e limpo
         itens = extrair_parcelas(bloco_corrigido)
         
-        # O resto da função continua como antes...
         for rot, val in itens.items():
             linhas_todas.append({"Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
         cov = {"Lote": lote, "Cliente": cliente}
@@ -213,9 +206,12 @@ def upload_file():
 
             df_todas, df_cov, df_div = processar_pdf(texto_pdf, emp)
 
+            # Limpeza e Filtragem da aba "TodasParcelas"
             df_todas = clean_parcela_column(df_todas)
             if not df_todas.empty:
                 df_todas = df_todas[~df_todas['Parcela'].str.contains("DÉBITOS DO MÊS ANTERIOR")]
+                # --- NOVO: Remove duplicatas acidentais de forma segura ---
+                df_todas.drop_duplicates(subset=['Lote', 'Parcela', 'Valor'], keep='first', inplace=True)
 
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
