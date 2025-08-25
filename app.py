@@ -36,7 +36,7 @@ def to_float(s: str):
 HEADERS = ("Remessa para Conferência","Página","Banco","IMOBILIARIOS","Débitos do Mês", "Vencimento","Lançamentos","Programação","Carta","DÉBITOS","ENCARGOS", "PAGAMENTO","TOTAL","Limite p/","TOTAL A PAGAR","PAGAMENTO EFETUADO","DESCONTO")
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.[A-Z]{2}\.\d{1,4})\b")
 PADRAO_PARCELA_MESMA_LINHA = re.compile(r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*" r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/]+?)\s+([\d.,]+)" r"(?=\s{2,}|\t|$)", re.MULTILINE)
-PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d.,]+)\s*$")
+PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
 
 # ==== Mapa dos empreendimentos e valores dinâmicos ====
 EMP_MAP = {"NVI":{"Melhoramentos":205.61,"Fundo de Transporte":9.00},"NVII":{"Melhoramentos":245.47,"Fundo de Transporte":9.00},"RSCI":{"Melhoramentos":250.42,"Fundo de Transporte":9.00},"RSCII":{"Melhoramentos":240.29,"Fundo de Transporte":9.00},"RSCIII":{"Melhoramentos":281.44,"Fundo de Transporte":9.00},"RSCIV":{"Melhoramentos":303.60,"Fundo de Transporte":9.00},"IATE":{"Melhoramentos":240.00,"Fundo de Transporte":9.00},"MARINA":{"Melhoramentos":240.00,"Fundo de Transporte":9.00},"SBRR":{"Melhoramentos":245.47,"Fundo de Transporte":13.00},"TSCV":{"Melhoramentos":0.00,"Fundo de Transporte":9.00},}
@@ -80,21 +80,17 @@ def tentar_nome_cliente(bloco: str) -> str:
     return "Nome não localizado"
 
 def extrair_parcelas(bloco: str):
-    # --- INÍCIO DA CORREÇÃO REFINADA ---
     linhas_limpas = []
     for linha in bloco.splitlines():
         linha_processada = linha
         palavras_chave_direita = ["DÉBITOS DO MÊS ANTERIOR", "ENCARGOS POR ATRASO", "PAGAMENTO EFETUADO"]
         for chave in palavras_chave_direita:
             pos = linha_processada.find(chave)
-            # SÓ CORTA a linha se a palavra-chave for encontrada E NÃO estiver no começo.
-            # pos > 0 significa que a chave não está no início.
             if pos > 0:
                 linha_processada = linha_processada[:pos]
-                break # Evita múltiplos cortes na mesma linha
+                break
         linhas_limpas.append(linha_processada)
     bloco_limpo = "\n".join(linhas_limpas)
-    # --- FIM DA CORREÇÃO ---
     
     itens = OrderedDict()
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
@@ -132,9 +128,11 @@ def processar_pdf(texto_pdf: str, emp: str):
         
         bloco_corrigido = bloco
         
+        # --- LÓGICA DE CORTE REFINADA ---
         if (i + 1) < len(nomes_clientes):
             proximo_cliente = nomes_clientes[i+1]
-            if proximo_cliente != "Nome não localizado":
+            # SÓ CORTA O BLOCO SE O PRÓXIMO CLIENTE FOR DIFERENTE DO ATUAL
+            if proximo_cliente != "Nome não localizado" and proximo_cliente != cliente:
                 posicao_corte = bloco.find(proximo_cliente)
                 if posicao_corte > 0:
                     bloco_corrigido = bloco[:posicao_corte]
