@@ -80,23 +80,22 @@ def tentar_nome_cliente(bloco: str) -> str:
     return "Nome não localizado"
 
 def extrair_parcelas(bloco: str):
-    # --- INÍCIO DA CORREÇÃO ---
-    # Etapa de pré-processamento para limpar linhas que contêm "Débitos" e "Lançamentos" juntos
+    # --- INÍCIO DA CORREÇÃO REFINADA ---
     linhas_limpas = []
     for linha in bloco.splitlines():
         linha_processada = linha
-        # Palavras-chave que indicam a coluna da direita (que queremos remover)
         palavras_chave_direita = ["DÉBITOS DO MÊS ANTERIOR", "ENCARGOS POR ATRASO", "PAGAMENTO EFETUADO"]
         for chave in palavras_chave_direita:
             pos = linha_processada.find(chave)
-            if pos != -1:
-                # Se encontrar uma palavra-chave, corta a linha naquele ponto
+            # SÓ CORTA a linha se a palavra-chave for encontrada E NÃO estiver no começo.
+            # pos > 0 significa que a chave não está no início.
+            if pos > 0:
                 linha_processada = linha_processada[:pos]
+                break # Evita múltiplos cortes na mesma linha
         linhas_limpas.append(linha_processada)
     bloco_limpo = "\n".join(linhas_limpas)
     # --- FIM DA CORREÇÃO ---
     
-    # O resto da função agora opera no 'bloco_limpo'
     itens = OrderedDict()
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1)); val = to_float(m.group(2))
