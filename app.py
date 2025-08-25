@@ -102,15 +102,36 @@ def extrair_parcelas(bloco: str):
         i += 1
     return itens
 
-# ==== Função de Processamento Principal ====
+# ==== Função de Processamento Principal (COM A CORREÇÃO) ====
 def processar_pdf(texto_pdf: str, emp: str):
     VALORES_CORRETOS = fixos_do_emp(emp)
     texto_pdf = texto_pdf.replace("Total Geral..: 357.917,14", "")
     blocos = fatiar_blocos(texto_pdf)
+    
+    # --- NOVA LÓGICA DE CORREÇÃO ---
+    # 1. Primeiro, identifica todos os nomes de clientes em ordem
+    nomes_clientes = [tentar_nome_cliente(bloco_texto) for lote, bloco_texto in blocos]
+    
     linhas_todas, linhas_cov, linhas_div = [], [], []
-    for lote, bloco in blocos:
-        cliente = tentar_nome_cliente(bloco)
-        itens = extrair_parcelas(bloco)
+    # 2. Itera sobre os blocos com um índice
+    for i, (lote, bloco) in enumerate(blocos):
+        cliente = nomes_clientes[i]
+        
+        bloco_corrigido = bloco
+        
+        # 3. Se houver um próximo bloco, usa o nome do próximo cliente como "marcador de corte"
+        if (i + 1) < len(nomes_clientes):
+            proximo_cliente = nomes_clientes[i+1]
+            if proximo_cliente != "Nome não localizado":
+                posicao_corte = bloco.find(proximo_cliente)
+                if posicao_corte > 0:
+                    # 4. Corta o bloco atual para evitar que ele contenha dados do próximo
+                    bloco_corrigido = bloco[:posicao_corte]
+        
+        # 5. Continua o processo usando o bloco de texto corrigido e limpo
+        itens = extrair_parcelas(bloco_corrigido)
+        
+        # O resto da função continua como antes...
         for rot, val in itens.items():
             linhas_todas.append({"Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
         cov = {"Lote": lote, "Cliente": cliente}
@@ -127,6 +148,7 @@ def processar_pdf(texto_pdf: str, emp: str):
             permitidos = VALORES_CORRETOS[rot]
             if all(abs(val - v) > 1e-6 for v in permitidos):
                 linhas_div.append({"Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor no Documento": float(val), "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)})
+
     vistos = set(); linhas_div_dedup = []
     for r in linhas_div:
         chave = (r["Lote"], r["Parcela"])
@@ -137,7 +159,7 @@ def processar_pdf(texto_pdf: str, emp: str):
     df_div   = pd.DataFrame(linhas_div_dedup)
     return df_todas, df_cov, df_div
 
-# ==== Função para Limpar Coluna Parcela ====
+# ==== Funções de Formatação do Excel ====
 def clean_parcela_column(df: pd.DataFrame) -> pd.DataFrame:
     if df.empty or 'Cliente' not in df.columns or 'Parcela' not in df.columns:
         return df
@@ -150,7 +172,6 @@ def clean_parcela_column(df: pd.DataFrame) -> pd.DataFrame:
     df['Parcela'] = df.apply(clean_row, axis=1)
     return df
 
-# ==== Função para Mesclar e Centralizar Células no Excel ====
 def merge_and_center_cells(worksheet, key_column_idx, merge_column_idx):
     start_row = 2
     while start_row <= worksheet.max_row:
@@ -192,7 +213,6 @@ def upload_file():
 
             df_todas, df_cov, df_div = processar_pdf(texto_pdf, emp)
 
-            # Limpa e Filtra os dados para a aba "TodasParcelas"
             df_todas = clean_parcela_column(df_todas)
             if not df_todas.empty:
                 df_todas = df_todas[~df_todas['Parcela'].str.contains("DÉBITOS DO MÊS ANTERIOR")]
@@ -213,8 +233,8 @@ def upload_file():
                                 cell.style = number_style
                 
                 todas_ws = writer.sheets['TodasParcelas']
-                merge_and_center_cells(todas_ws, key_column_idx=1, merge_column_idx=1) # Coluna Lote
-                merge_and_center_cells(todas_ws, key_column_idx=2, merge_column_idx=2) # Coluna Cliente (Corrigido)
+                merge_and_center_cells(todas_ws, key_column_idx=1, merge_column_idx=1)
+                merge_and_center_cells(todas_ws, key_column_idx=2, merge_column_idx=2)
 
             report_filename = f"relatorio_{emp}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
