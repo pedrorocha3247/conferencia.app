@@ -10,7 +10,7 @@ from collections import OrderedDict
 from flask import Flask, render_template, request, send_file, url_for
 from openpyxl.styles import NamedStyle, Alignment
 
-# ==== Normalização ====
+# ==== Normalização e Extração ====
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
 def normalizar_texto(s: str) -> str:
     s = s.translate(DASHES).replace("\u00A0", " ")
@@ -32,7 +32,7 @@ def to_float(s: str):
     try: return float(s.replace(".","").replace(",", ".").strip())
     except: return None
 
-# ==== Regras comuns ====
+# ==== Regras e Padrões de Extração ====
 HEADERS = ("Remessa para Conferência","Página","Banco","IMOBILIARIOS","Débitos do Mês", "Vencimento","Lançamentos","Programação","Carta","DÉBITOS","ENCARGOS", "PAGAMENTO","TOTAL","Limite p/","TOTAL A PAGAR","PAGAMENTO EFETUADO","DESCONTO")
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.[A-Z]{2}\.\d{1,4})\b")
 PADRAO_PARCELA_MESMA_LINHA = re.compile(r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*" r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/]+?)\s+([\d.,]+)" r"(?=\s{2,}|\t|$)", re.MULTILINE)
@@ -56,7 +56,7 @@ def detectar_emp_por_nome_arquivo(path: str):
         if f"_{k}." in (os.path.basename(path).upper()+"."): return k
     return None
 
-# ==== Funções de extração ====
+# ==== Funções de extração e limpeza ====
 def limpar_rotulo(lbl: str) -> str:
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
@@ -137,6 +137,19 @@ def processar_pdf(texto_pdf: str, emp: str):
     df_div   = pd.DataFrame(linhas_div_dedup)
     return df_todas, df_cov, df_div
 
+# ==== Função para Limpar Coluna Parcela ====
+def clean_parcela_column(df: pd.DataFrame) -> pd.DataFrame:
+    if df.empty or 'Cliente' not in df.columns or 'Parcela' not in df.columns:
+        return df
+    def clean_row(row):
+        cliente = str(row['Cliente'])
+        parcela = str(row['Parcela'])
+        if parcela.startswith(cliente):
+            return re.sub(f"^{re.escape(cliente)}\s*[-–—]?\s*", "", parcela).strip()
+        return parcela
+    df['Parcela'] = df.apply(clean_row, axis=1)
+    return df
+
 # ==== Função para Mesclar e Centralizar Células no Excel ====
 def merge_and_center_cells(worksheet, key_column_idx, merge_column_idx):
     start_row = 2
@@ -179,35 +192,29 @@ def upload_file():
 
             df_todas, df_cov, df_div = processar_pdf(texto_pdf, emp)
 
-            # Filtra as linhas indesejadas da aba "TodasParcelas"
+            # Limpa e Filtra os dados para a aba "TodasParcelas"
+            df_todas = clean_parcela_column(df_todas)
             if not df_todas.empty:
                 df_todas = df_todas[~df_todas['Parcela'].str.contains("DÉBITOS DO MÊS ANTERIOR")]
 
             output = io.BytesIO()
             with pd.ExcelWriter(output, engine='openpyxl') as writer:
-                # Escreve os dados em cada aba
                 df_div.to_excel(writer, index=False, sheet_name="Divergencias")
                 df_cov.to_excel(writer, index=False, sheet_name="Cobertura")
                 df_todas.to_excel(writer, index=False, sheet_name="TodasParcelas")
 
-                # Cria o estilo de formatação de número (padrão brasileiro)
                 number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
-
-                # Itera sobre cada aba para aplicar estilos
                 for sheet_name in writer.sheets:
                     worksheet = writer.sheets[sheet_name]
-                    # Desativa as linhas de grade
                     worksheet.sheet_view.showGridLines = False
-                    # Itera sobre as células para aplicar o formato de número
                     for column_cells in worksheet.columns:
                         for cell in column_cells[1:]:
                             if isinstance(cell.value, (int, float)):
                                 cell.style = number_style
                 
-                # Mescla as células especificamente na aba "TodasParcelas"
                 todas_ws = writer.sheets['TodasParcelas']
                 merge_and_center_cells(todas_ws, key_column_idx=1, merge_column_idx=1) # Coluna Lote
-                merge_and_center_cells(todas_ws, key_column_idx=1, merge_column_idx=2) # Coluna Cliente
+                merge_and_center_cells(todas_ws, key_column_idx=2, merge_column_idx=2) # Coluna Cliente (Corrigido)
 
             report_filename = f"relatorio_{emp}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
