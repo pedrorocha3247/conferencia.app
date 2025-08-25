@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Conferência de Extratos</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #f8f9fa; }
+        .container { max-width: 600px; margin-top: 5rem; }
+        .card { padding: 2rem; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="card shadow-sm">
+            <h1 class="text-center mb-4">Analisador de Extratos</h1>
+            <p class="text-center text-muted mb-4">Faça o upload do arquivo PDF para conferir as divergências.</p>
+            <form action="/upload" method="post" enctype="multipart/form-data">
+                <div class="mb-3">
+                    <input class="form-control" type="file" name="pdf_file" accept=".pdf" required>
+                </div>
+                <div class="d-grid">
+                    <button type="submit" class="btn btn-primary btn-lg">Analisar Arquivo</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</body>
+</html>
