@@ -36,7 +36,7 @@ def to_float(s: str):
 HEADERS = ("Remessa para Conferência","Página","Banco","IMOBILIARIOS","Débitos do Mês", "Vencimento","Lançamentos","Programação","Carta","DÉBITOS","ENCARGOS", "PAGAMENTO","TOTAL","Limite p/","TOTAL A PAGAR","PAGAMENTO EFETUADO","DESCONTO")
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.[A-Z]{2}\.\d{1,4})\b")
 PADRAO_PARCELA_MESMA_LINHA = re.compile(r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*" r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/]+?)\s+([\d.,]+)" r"(?=\s{2,}|\t|$)", re.MULTILINE)
-PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
+PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d.,]+)\s*$")
 
 # ==== Mapa dos empreendimentos e valores dinâmicos ====
 EMP_MAP = {"NVI":{"Melhoramentos":205.61,"Fundo de Transporte":9.00},"NVII":{"Melhoramentos":245.47,"Fundo de Transporte":9.00},"RSCI":{"Melhoramentos":250.42,"Fundo de Transporte":9.00},"RSCII":{"Melhoramentos":240.29,"Fundo de Transporte":9.00},"RSCIII":{"Melhoramentos":281.44,"Fundo de Transporte":9.00},"RSCIV":{"Melhoramentos":303.60,"Fundo de Transporte":9.00},"IATE":{"Melhoramentos":240.00,"Fundo de Transporte":9.00},"MARINA":{"Melhoramentos":240.00,"Fundo de Transporte":9.00},"SBRR":{"Melhoramentos":245.47,"Fundo de Transporte":13.00},"TSCV":{"Melhoramentos":0.00,"Fundo de Transporte":9.00},}
@@ -80,11 +80,28 @@ def tentar_nome_cliente(bloco: str) -> str:
     return "Nome não localizado"
 
 def extrair_parcelas(bloco: str):
+    # --- INÍCIO DA CORREÇÃO ---
+    # Etapa de pré-processamento para limpar linhas que contêm "Débitos" e "Lançamentos" juntos
+    linhas_limpas = []
+    for linha in bloco.splitlines():
+        linha_processada = linha
+        # Palavras-chave que indicam a coluna da direita (que queremos remover)
+        palavras_chave_direita = ["DÉBITOS DO MÊS ANTERIOR", "ENCARGOS POR ATRASO", "PAGAMENTO EFETUADO"]
+        for chave in palavras_chave_direita:
+            pos = linha_processada.find(chave)
+            if pos != -1:
+                # Se encontrar uma palavra-chave, corta a linha naquele ponto
+                linha_processada = linha_processada[:pos]
+        linhas_limpas.append(linha_processada)
+    bloco_limpo = "\n".join(linhas_limpas)
+    # --- FIM DA CORREÇÃO ---
+    
+    # O resto da função agora opera no 'bloco_limpo'
     itens = OrderedDict()
-    for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco):
+    for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1)); val = to_float(m.group(2))
         if lbl not in itens and val is not None: itens[lbl] = val
-    linhas = bloco.splitlines()
+    linhas = bloco_limpo.splitlines()
     i = 0
     while i < len(linhas):
         L = linhas[i].strip()
@@ -206,16 +223,10 @@ def upload_file():
 
             df_todas, df_cov, df_div = processar_pdf(texto_pdf, emp)
 
-            # Limpeza e Filtragem da aba "TodasParcelas"
             df_todas = clean_parcela_column(df_todas)
             if not df_todas.empty:
-                # Padroniza a coluna 'Parcela' para normalizar nomes como "TAMA - Taxa..."
                 df_todas['Parcela'] = df_todas['Parcela'].apply(limpar_rotulo)
-                
-                # Filtra linhas de resumo
                 df_todas = df_todas[~df_todas['Parcela'].str.contains("DÉBITOS DO MÊS ANTERIOR")]
-                
-                # Remove duplicatas acidentais (onde Lote, Parcela e Valor são idênticos)
                 df_todas.drop_duplicates(subset=['Lote', 'Parcela', 'Valor'], keep='first', inplace=True)
 
             output = io.BytesIO()
