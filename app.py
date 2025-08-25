@@ -209,8 +209,13 @@ def upload_file():
             # Limpeza e Filtragem da aba "TodasParcelas"
             df_todas = clean_parcela_column(df_todas)
             if not df_todas.empty:
+                # Padroniza a coluna 'Parcela' para normalizar nomes como "TAMA - Taxa..."
+                df_todas['Parcela'] = df_todas['Parcela'].apply(limpar_rotulo)
+                
+                # Filtra linhas de resumo
                 df_todas = df_todas[~df_todas['Parcela'].str.contains("DÉBITOS DO MÊS ANTERIOR")]
-                # --- NOVO: Remove duplicatas acidentais de forma segura ---
+                
+                # Remove duplicatas acidentais (onde Lote, Parcela e Valor são idênticos)
                 df_todas.drop_duplicates(subset=['Lote', 'Parcela', 'Valor'], keep='first', inplace=True)
 
             output = io.BytesIO()
