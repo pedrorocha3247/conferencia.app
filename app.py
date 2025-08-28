@@ -196,9 +196,15 @@ def merge_and_center_cells(worksheet, key_column_idx, merge_column_idx):
         start_row = end_row + 1
 
 # --- Início da Aplicação Web Flask ---
+# --- Início da Aplicação Web Flask ---
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
+app.config['MAX_CONTENT_LENGTH'] = 25 * 1024 * 1024  # 25MB pra não matar o dyno
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+
+@app.get("/healthz")
+def healthz():
+    return "ok", 200
 
 @app.route('/')
 def index():
@@ -261,4 +267,6 @@ def download_file(filename):
     return send_file(path, as_attachment=True)
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0')
+    port = int(os.environ.get('PORT', 8080))
+    app.run(debug=False, host='0.0.0.0', port=port)
+
