@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: conferencia-extratos
+    runtime: docker
+    plan: starter
+    envVars:
+      - key: PYTHONUNBUFFERED
+        value: "1"
+    healthCheckPath: /healthz
+    autoDeploy: true
