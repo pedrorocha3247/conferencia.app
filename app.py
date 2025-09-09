@@ -20,7 +20,7 @@ HEADERS = (
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
 
-# CORREÇÃO: Padrão de lote abrangente para todos os formatos, incluindo caracteres gregos.
+# CORREÇÃO: Padrão de lote abrangente para todos os formatos, incluindo caracteres gregos e numéricos.
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.(?:[A-Z\u0399\u039A]{2}|\d{2})\.\d{1,4})\b")
 
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
@@ -125,71 +125,74 @@ def fatiar_blocos(texto: str):
 
 def tentar_nome_cliente(bloco: str) -> str:
     """
-    Função aprimorada para encontrar o nome do cliente.
-    Ela procura por uma linha que contenha pelo menos duas palavras e não seja um cabeçalho conhecido.
+    Função aprimorada para encontrar o nome do cliente de forma mais robusta.
     """
     linhas = bloco.split('\n')
-    for i, linha in enumerate(linhas):
+    if not linhas:
+        return "Nome não localizado"
+
+    # Tentativa 1: Nome na mesma linha do lote
+    primeira_linha = linhas[0].strip()
+    match_lote = PADRAO_LOTE.match(primeira_linha)
+    if match_lote:
+        nome_candidato = primeira_linha[match_lote.end():].strip()
+        if len(nome_candidato) > 4 and ' ' in nome_candidato and not any(h.upper() in nome_candidato.upper() for h in HEADERS):
+            return nome_candidato
+
+    # Tentativa 2: Nome nas linhas seguintes, com validação mais estrita
+    for linha in linhas[1:5]:
         linha_limpa = linha.strip()
         
-        # Critérios para ser um nome de cliente
         is_valid_name = (
             len(linha_limpa) > 5 and
-            ' ' in linha_limpa and # Deve ter pelo menos um espaço (nome e sobrenome)
-            any(c.isalpha() for c in linha_limpa) and # Deve conter letras
-            not any(h in linha_limpa for h in HEADERS) and # Não pode ser um cabeçalho
-            not PADRAO_LOTE.match(linha_limpa) and # Não pode ser um lote
-            not linha_limpa.startswith("Total")
+            ' ' in linha_limpa and
+            sum(c.isalpha() for c in linha_limpa) / len(linha_limpa.replace(" ", "")) > 0.8 and # Alta proporção de letras
+            not any(h.upper() in linha_limpa.upper() for h in HEADERS) and
+            not PADRAO_LOTE.match(linha_limpa) and
+            not re.search(r'\d{2}/\d{2}/\d{4}', linha_limpa) and
+            not linha_limpa.upper().startswith("TOTAL")
         )
         
         if is_valid_name:
-            # Verifica se a linha seguinte não é um valor numérico (evita pegar nomes de parcelas)
-            if i + 1 < len(linhas):
-                proxima_linha = linhas[i+1].strip()
-                if not PADRAO_NUMERO_PURO.match(proxima_linha):
-                    return linha_limpa
-            else:
-                 return linha_limpa # É a última linha, assume que é o nome
+            return linha_limpa
 
     return "Nome não localizado"
 
 
 def extrair_parcelas(bloco: str):
+    itens = OrderedDict()
+    
     linhas_limpas = []
     for linha in bloco.splitlines():
-        linha_processada = linha
-        palavras_chave_direita = ["DÉBITOS DO MÊS ANTERIOR", "ENCARGOS POR ATRASO", "PAGAMENTO EFETUADO"]
-        for chave in palavras_chave_direita:
-            pos = linha_processada.find(chave)
-            if pos > 20:
-                linha_processada = linha_processada[:pos]
-                break
-        linhas_limpas.append(linha_processada)
+        linha_processada = re.split(r'\s{4,}', linha)[0]
+        linhas_limpas.append(linha_processada.strip())
     bloco_limpo = "\n".join(linhas_limpas)
     
-    itens = OrderedDict()
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1)); val = to_float(m.group(2))
-        if lbl not in itens and val is not None:
+        if lbl and lbl not in itens and val is not None:
             itens[lbl] = val
             
     linhas = bloco_limpo.splitlines()
-    i = 0
-    while i < len(linhas):
-        L = linhas[i].strip()
-        if L and not any(h in L for h in HEADERS):
-            tem_letras = any(c.isalpha() for c in L)
-            if tem_letras and not PADRAO_NUMERO_PURO.match(L):
-                j = i + 1
-                while j < len(linhas) and not linhas[j].strip(): j += 1
-                if j < len(linhas):
-                    m2 = PADRAO_NUMERO_PURO.match(linhas[j].strip())
-                    if m2:
-                        lbl = limpar_rotulo(L); val = to_float(m2.group(1))
-                        if lbl not in itens and val is not None:
-                            itens[lbl] = val
-                        i = j
-        i += 1
+    for i, linha in enumerate(linhas):
+        linha_limpa = linha.strip()
+        if not linha_limpa: continue
+
+        is_label = (
+            any(c.isalpha() for c in linha_limpa) and
+            not any(h.upper() in linha_limpa.upper() for h in HEADERS) and
+            limpar_rotulo(linha_limpa) not in itens
+        )
+
+        if is_label and not PADRAO_NUMERO_PURO.match(linha_limpa):
+            if i + 1 < len(linhas):
+                proxima_linha = linhas[i+1].strip()
+                match_num = PADRAO_NUMERO_PURO.match(proxima_linha)
+                if match_num:
+                    lbl = limpar_rotulo(linha_limpa)
+                    val = to_float(match_num.group(1))
+                    if lbl and lbl not in itens and val is not None:
+                        itens[lbl] = val
     return itens
 
 # ==== Função de Processamento Principal ====
@@ -203,11 +206,7 @@ def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
     linhas_todas, linhas_cov, linhas_div = [], [], []
 
     for lote, bloco in blocos:
-        if modo_separacao == 'boleto':
-            emp_atual = emp_fixo
-        else:
-            emp_atual = detectar_emp_por_lote(lote)
-        
+        emp_atual = emp_fixo if modo_separacao == 'boleto' else detectar_emp_por_lote(lote)
         cliente = tentar_nome_cliente(bloco)
         itens = extrair_parcelas(bloco)
         
