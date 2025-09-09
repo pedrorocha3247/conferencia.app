@@ -1,69 +1,83 @@
 <!DOCTYPE html>
+
 <html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Resultados da Validação</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <style>
-        body { background-color: #f8f9fa; }
-        .table { font-size: 0.9rem; }
-        .table thead { position: sticky; top: 0; background: #fff; }
-        .summary-card { background-color: #e9ecef; }
-        .summary-item {
-            padding: 0.5rem 1rem;
-            border-right: 1px solid #d4d4d4;
-        }
-        .summary-item:last-child {
-            border-right: none;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resultados da Validação</title>
+<link href="https://www.google.com/search?q=https://cdn.jsdelivr.net/npm/bootstrap%405.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<style>
+body { background-color: #f8f9fa; }
+.table { font-size: 0.9rem; }
+.table-container {
+max-height: 65vh;
+overflow-y: auto;
+}
+.table thead th {
+position: sticky;
+top: -1px; /* Evita pequenos espaços /
+background-color: #f8f9fa; / Cor de fundo para o cabeçalho fixo */
+text-align: center;
+vertical-align: middle;
+z-index: 10;
+box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1);
+}
+.summary-card { background-color: #e9ecef; }
+.summary-item {
+padding: 0.5rem 1rem;
+border-right: 1px solid #d4d4d4;
+}
+.summary-item:last-child {
+border-right: none;
+}
+</style>
 </head>
 <body>
-    <div class="container-fluid mt-4 px-4">
-        <div class="d-flex justify-content-between align-items-center mb-3">
-            <h2>Resultados da Validação</h2>
-            <a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
-        </div>
+<div class="container-fluid mt-4 px-4">
+<div class="d-flex justify-content-between align-items-center mb-3">
+<h2>Resultados da Validação</h2>
+<a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
+</div>
 
-        <div class="card mb-4">
-            <div class="card-body summary-card">
-                <h5 class="card-title">Resumo da Análise</h5>
-                <div class="row text-center">
-                    <div class="col-md-3 summary-item">
-                        <strong>Modo de Análise:</strong><br>
-                        <span class="badge bg-primary fs-6">{{ modo_usado.replace('_', '/').title() }}</span>
-                    </div>
-                    <div class="col-md-3 summary-item">
-                        <strong>Total de Lotes Processados:</strong><br>
-                        <span class="badge bg-secondary fs-6">{{ total_lotes }}</span>
-                    </div>
-                    <div class="col-md-3 summary-item">
-                        <strong>Total de Divergências:</strong><br>
-                        <span class="badge bg-danger fs-6">{{ total_divergencias }}</span>
-                    </div>
-                    {% if nao_classificados > 0 %}
-                    <div class="col-md-3 summary-item">
-                        <strong>Lotes Não Classificados:</strong><br>
-                        <span class="badge bg-warning text-dark fs-6">{{ nao_classificados }}</span>
-                    </div>
-                    {% endif %}
+    <div class="card mb-4">
+        <div class="card-body summary-card">
+            <h5 class="card-title">Resumo da Análise</h5>
+            <div class="row text-center">
+                <div class="col-md-3 summary-item">
+                    <strong>Modo de Análise:</strong><br>
+                    <span class="badge bg-primary fs-6">{{ modo_usado.replace('_', '/').title() }}</span>
                 </div>
-                <hr>
-                <a href="{{ download_url }}" class="btn btn-success">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-excel-fill" viewBox="0 0 16 16">
-                        <path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0M9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1M5.884 6.68 8 9.219l2.116-2.54a.5.5 0 1 1 .768.641L8.651 10l2.233 2.68a.5.5 0 0 1-.768.64L8 10.781l-2.116 2.54a.5.5 0 0 1-.768-.641L7.349 10 5.116 7.32a.5.5 0 1 1 .768-.64"/>
-                    </svg>
-                    Baixar Relatório Completo (.xlsx)
-                </a>
+                <div class="col-md-3 summary-item">
+                    <strong>Total de Lotes Processados:</strong><br>
+                    <span class="badge bg-secondary fs-6">{{ total_lotes }}</span>
+                </div>
+                <div class="col-md-3 summary-item">
+                    <strong>Total de Divergências:</strong><br>
+                    <span class="badge bg-danger fs-6">{{ total_divergencias }}</span>
+                </div>
+                {% if nao_classificados > 0 %}
+                <div class="col-md-3 summary-item">
+                    <strong>Lotes Não Classificados:</strong><br>
+                    <span class="badge bg-warning text-dark fs-6">{{ nao_classificados }}</span>
+                </div>
+                {% endif %}
             </div>
+            <hr>
+            <a href="{{ download_url }}" class="btn btn-success">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-excel-fill" viewBox="0 0 16 16">
+                    <path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0M9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1M5.884 6.68 8 9.219l2.116-2.54a.5.5 0 1 1 .768.641L8.651 10l2.233 2.68a.5.5 0 0 1-.768.64L8 10.781l-2.116 2.54a.5.5 0 0 1-.768-.641L7.349 10 5.116 7.32a.5.5 0 1 1 .768-.64"/>
+                </svg>
+                Baixar Relatório Completo (.xlsx)
+            </a>
         </div>
-        
-        <div class="card">
-            <div class="card-header">
-                <h4>Tabela de Divergências</h4>
-            </div>
-            <div class="card-body" style="max-height: 60vh; overflow-y: auto;">
+    </div>
+    
+    <div class="card">
+        <div class="card-header">
+            <h4>Tabela de Divergências</h4>
+        </div>
+        <div class="card-body p-0">
+            <div class="table-container">
                 {% if total_divergencias > 0 %}
                     {{ table|safe }}
                 {% else %}
@@ -72,6 +86,7 @@
             </div>
         </div>
     </div>
+</div>
+
 </body>
 </html>
-
