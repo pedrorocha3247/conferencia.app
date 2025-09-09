@@ -13,20 +13,16 @@ from openpyxl.styles import NamedStyle, Alignment
 
 # ==== Constantes e Mapeamentos ====
 
-# Caracteres de hífen a serem normalizados
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
-
-# Cabeçalhos e textos genéricos a serem ignorados na extração de dados
 HEADERS = (
     "Remessa para Conferência", "Página", "Banco", "IMOBILIARIOS", "Débitos do Mês",
     "Vencimento", "Lançamentos", "Programação", "Carta", "DÉBITOS", "ENCARGOS",
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
 
-# Padrão Regex para identificar todos os formatos de lote, incluindo os com caracteres gregos
+# CORREÇÃO: Padrão de lote abrangente para todos os formatos, incluindo caracteres gregos.
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.(?:[A-Z\u0399\u039A]{2}|\d{2})\.\d{1,4})\b")
 
-# Padrões Regex para extrair parcelas e valores
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
     r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*"
     r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/]+?)\s+([\d.,]+)"
@@ -34,15 +30,12 @@ PADRAO_PARCELA_MESMA_LINHA = re.compile(
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
 
-# Mapeamento de código do lote para nome do empreendimento (Modo Débito/Crédito)
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'TSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
-    # SBRR foi dividido para corresponder à nova estrutura
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
 
-# Mapeamento de valores fixos por empreendimento
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -52,14 +45,12 @@ EMP_MAP = {
     "RSCIV": {"Melhoramentos": 303.60, "Fundo de Transporte": 9.00},
     "IATE": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
     "MARINA": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
-    # SBRR dividido em I, II e III
     "SBRRI": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "SBRRII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "TSCV": {"Melhoramentos": 0.00, "Fundo de Transporte": 9.00},
 }
 
-# Valores base que são iguais para todos
 BASE_FIXOS = {
     "Taxa de Conservação": [434.11],
     "Contrib. Social SLIM": [103.00, 309.00],
@@ -71,14 +62,12 @@ BASE_FIXOS = {
 # ==== Funções de Normalização e Extração ====
 
 def normalizar_texto(s: str) -> str:
-    """Limpa e padroniza o texto extraído do PDF."""
     s = s.translate(DASHES).replace("\u00A0", " ")
     s = "".join(ch for ch in s if ch not in "\u200B\u200C\u200D\uFEFF")
     s = unicodedata.normalize("NFKC", s)
     return s
 
 def extrair_texto_pdf(stream_pdf) -> str:
-    """Extrai texto de um stream de PDF usando PyMuPDF."""
     try:
         doc = fitz.open(stream=stream_pdf, filetype="pdf")
         texto = "\n".join(p.get_text("text", sort=True) for p in doc)
@@ -89,7 +78,6 @@ def extrair_texto_pdf(stream_pdf) -> str:
         return ""
 
 def to_float(s: str):
-    """Converte uma string formatada como moeda brasileira para float."""
     try:
         return float(s.replace(".", "").replace(",", ".").strip())
     except (ValueError, TypeError):
@@ -98,16 +86,14 @@ def to_float(s: str):
 # ==== Funções de Lógica e Classificação ====
 
 def fixos_do_emp(emp: str):
-    """Retorna o dicionário de valores corretos para um empreendimento."""
     if emp not in EMP_MAP:
-        return BASE_FIXOS # Retorna apenas os valores base se o empreendimento não for encontrado
+        return BASE_FIXOS
     f = dict(BASE_FIXOS)
     f["Melhoramentos"] = [float(EMP_MAP[emp]["Melhoramentos"])]
     f["Fundo de Transporte"] = [float(EMP_MAP[emp]["Fundo de Transporte"])]
     return f
 
 def detectar_emp_por_nome_arquivo(path: str):
-    """Detecta o empreendimento pelo sufixo no nome do arquivo (Modo Boleto)."""
     nome = os.path.splitext(os.path.basename(path))[0].upper()
     for k in EMP_MAP.keys():
         if nome.endswith("_" + k) or nome.endswith(k):
@@ -115,7 +101,6 @@ def detectar_emp_por_nome_arquivo(path: str):
     return None
 
 def detectar_emp_por_lote(lote: str):
-    """Detecta o empreendimento pelos 2 primeiros dígitos do lote (Modo Débito/Crédito)."""
     if not lote or "." not in lote:
         return "NAO_CLASSIFICADO"
     prefixo = lote.split('.')[0]
@@ -124,14 +109,11 @@ def detectar_emp_por_lote(lote: str):
 # ==== Funções de Extração de Dados ====
 
 def limpar_rotulo(lbl: str) -> str:
-    """Remove informações variáveis do rótulo da parcela."""
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
     return lbl
 
 def fatiar_blocos(texto: str):
-    """Divide o texto do PDF em blocos, um para cada cliente, usando o lote como delimitador."""
-    # Pré-processamento para garantir que cada lote comece em uma nova linha
     texto_processado = PADRAO_LOTE.sub(r"\n\1", texto)
     ms = list(PADRAO_LOTE.finditer(texto_processado))
     blocos = []
@@ -142,38 +124,55 @@ def fatiar_blocos(texto: str):
     return blocos
 
 def tentar_nome_cliente(bloco: str) -> str:
-    """Tenta extrair o nome do cliente do cabeçalho do bloco."""
-    for linha in bloco.splitlines()[1:12]: # Analisa as primeiras linhas do bloco
-        L = linha.strip()
-        if len(L) < 5 or any(h in L for h in HEADERS):
-            continue
-        if " " in L and sum(c.isalpha() for c in L) >= 5:
-            return L
+    """
+    Função aprimorada para encontrar o nome do cliente.
+    Ela procura por uma linha que contenha pelo menos duas palavras e não seja um cabeçalho conhecido.
+    """
+    linhas = bloco.split('\n')
+    for i, linha in enumerate(linhas):
+        linha_limpa = linha.strip()
+        
+        # Critérios para ser um nome de cliente
+        is_valid_name = (
+            len(linha_limpa) > 5 and
+            ' ' in linha_limpa and # Deve ter pelo menos um espaço (nome e sobrenome)
+            any(c.isalpha() for c in linha_limpa) and # Deve conter letras
+            not any(h in linha_limpa for h in HEADERS) and # Não pode ser um cabeçalho
+            not PADRAO_LOTE.match(linha_limpa) and # Não pode ser um lote
+            not linha_limpa.startswith("Total")
+        )
+        
+        if is_valid_name:
+            # Verifica se a linha seguinte não é um valor numérico (evita pegar nomes de parcelas)
+            if i + 1 < len(linhas):
+                proxima_linha = linhas[i+1].strip()
+                if not PADRAO_NUMERO_PURO.match(proxima_linha):
+                    return linha_limpa
+            else:
+                 return linha_limpa # É a última linha, assume que é o nome
+
     return "Nome não localizado"
 
+
 def extrair_parcelas(bloco: str):
-    """Extrai todas as parcelas e valores de um bloco de texto de cliente."""
-    # Remove colunas da direita que podem ser confundidas com valores de parcelas
     linhas_limpas = []
     for linha in bloco.splitlines():
         linha_processada = linha
         palavras_chave_direita = ["DÉBITOS DO MÊS ANTERIOR", "ENCARGOS POR ATRASO", "PAGAMENTO EFETUADO"]
         for chave in palavras_chave_direita:
             pos = linha_processada.find(chave)
-            if pos > 20: # Só corta se a chave estiver bem à direita
+            if pos > 20:
                 linha_processada = linha_processada[:pos]
                 break
         linhas_limpas.append(linha_processada)
     bloco_limpo = "\n".join(linhas_limpas)
     
     itens = OrderedDict()
-    # 1. Captura parcelas onde o valor está na mesma linha
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1)); val = to_float(m.group(2))
         if lbl not in itens and val is not None:
             itens[lbl] = val
             
-    # 2. Captura parcelas onde o valor está na linha de baixo
     linhas = bloco_limpo.splitlines()
     i = 0
     while i < len(linhas):
@@ -182,21 +181,20 @@ def extrair_parcelas(bloco: str):
             tem_letras = any(c.isalpha() for c in L)
             if tem_letras and not PADRAO_NUMERO_PURO.match(L):
                 j = i + 1
-                while j < len(linhas) and not linhas[j].strip(): j += 1 # Pula linhas em branco
+                while j < len(linhas) and not linhas[j].strip(): j += 1
                 if j < len(linhas):
                     m2 = PADRAO_NUMERO_PURO.match(linhas[j].strip())
                     if m2:
                         lbl = limpar_rotulo(L); val = to_float(m2.group(1))
                         if lbl not in itens and val is not None:
                             itens[lbl] = val
-                        i = j # Pula para a linha do valor
+                        i = j
         i += 1
     return itens
 
 # ==== Função de Processamento Principal ====
 
 def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
-    """Processa o texto do PDF, classifica os registros e encontra divergências."""
     blocos = fatiar_blocos(texto_pdf)
     
     if not blocos:
@@ -207,10 +205,8 @@ def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
     for lote, bloco in blocos:
         if modo_separacao == 'boleto':
             emp_atual = emp_fixo
-        elif modo_separacao == 'debito_credito':
-            emp_atual = detectar_emp_por_lote(lote)
         else:
-            emp_atual = 'NAO_CLASSIFICADO'
+            emp_atual = detectar_emp_por_lote(lote)
         
         cliente = tentar_nome_cliente(bloco)
         itens = extrair_parcelas(bloco)
@@ -243,7 +239,6 @@ def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
                     "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
                 })
 
-    # Previne duplicatas que podem surgir da extração de texto
     vistos = set()
     linhas_div_dedup = []
     for r in linhas_div:
@@ -261,7 +256,6 @@ def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
 # ==== Funções de Formatação do Excel ====
 
 def formatar_excel(output_stream, dfs: dict):
-    """Formata e escreve os DataFrames em um arquivo Excel."""
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
         for sheet_name, df in dfs.items():
             df.to_excel(writer, index=False, sheet_name=sheet_name)
@@ -275,7 +269,6 @@ def formatar_excel(output_stream, dfs: dict):
                 for cell in column_cells:
                     if cell.value:
                         max_length = max(max_length, len(str(cell.value)))
-                    # Aplica estilo numérico
                     if isinstance(cell.value, (int, float)):
                         cell.style = number_style
                 adjusted_width = (max_length + 2)
@@ -296,7 +289,7 @@ def index():
 def upload_file():
     if 'pdf_file' not in request.files: return "Nenhum arquivo enviado.", 400
     file = request.files['pdf_file']
-    modo_separacao = request.form.get('modo_separacao', 'boleto') # Pega o modo do form
+    modo_separacao = request.form.get('modo_separacao', 'boleto')
 
     if file.filename == '': return "Nenhum arquivo selecionado.", 400
 
@@ -317,13 +310,9 @@ def upload_file():
 
             df_todas, df_cov, df_div = processar_pdf(texto_pdf, modo_separacao, emp_fixo)
             
-            # Ordena os resultados para melhor visualização
-            if not df_div.empty:
-                df_div = df_div.sort_values(by=['Empreendimento', 'Lote'])
-            if not df_cov.empty:
-                df_cov = df_cov.sort_values(by=['Empreendimento', 'Lote'])
-            if not df_todas.empty:
-                df_todas = df_todas.sort_values(by=['Empreendimento', 'Lote'])
+            if not df_div.empty: df_div = df_div.sort_values(by=['Empreendimento', 'Lote'])
+            if not df_cov.empty: df_cov = df_cov.sort_values(by=['Empreendimento', 'Lote'])
+            if not df_todas.empty: df_todas = df_todas.sort_values(by=['Empreendimento', 'Lote'])
 
             output = io.BytesIO()
             dfs_to_excel = {
@@ -334,17 +323,14 @@ def upload_file():
             formatar_excel(output, dfs_to_excel)
             output.seek(0)
 
-            # Define o nome do arquivo de saída
             base_name = os.path.splitext(file.filename)[0]
             report_filename = f"relatorio_{base_name}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
             
-            with open(report_path, 'wb') as f:
-                f.write(output.getvalue())
+            with open(report_path, 'wb') as f: f.write(output.getvalue())
 
             div_html = df_div.to_html(classes='table table-striped table-hover', index=False, border=0) if not df_div.empty else "<p>Nenhuma divergência encontrada.</p>"
             
-            # Estatísticas para o template de resultados
             total_lotes = len(df_cov)
             total_divergencias = len(df_div)
             nao_classificados = len(df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO']) if not df_cov.empty else 0
@@ -359,7 +345,6 @@ def upload_file():
         
         except Exception as e:
             print(f"Ocorreu um erro no processamento: {e}", file=sys.stderr)
-            # Adiciona mais detalhes do erro para depuração
             import traceback
             traceback.print_exc()
             return f"Ocorreu um erro inesperado durante o processamento. Verifique os logs do servidor.", 500
@@ -373,3 +358,4 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
+
