@@ -20,6 +20,7 @@ HEADERS = (
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
 
+# Padrão de lote que aceita formatos como 09.JS.09, 09.10.03 e com caracteres gregos.
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.(?:[A-Z\u0399\u039A]{2}|\d{2})\.\d{1,4})\b")
 
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
@@ -127,18 +128,20 @@ def tentar_nome_cliente(bloco: str) -> str:
     if not linhas:
         return "Nome não localizado"
 
-    primeira_linha = linhas[0].strip()
-    match_lote = PADRAO_LOTE.match(primeira_linha)
+    # Estratégia 1: Nome na mesma linha do lote (Débito/Crédito)
+    primeira_linha_limpa = linhas[0].strip()
+    match_lote = PADRAO_LOTE.match(primeira_linha_limpa)
     if match_lote:
-        nome_candidato = primeira_linha[match_lote.end():].strip()
+        nome_candidato = primeira_linha_limpa[match_lote.end():].strip()
         if len(nome_candidato) > 4 and ' ' in nome_candidato and not any(h.upper() in nome_candidato.upper() for h in HEADERS):
             return nome_candidato
 
+    # Estratégia 2: Nome em linhas subsequentes (Boleto)
     for linha in linhas[1:5]:
         linha_limpa = linha.strip()
         is_valid_name = (
             len(linha_limpa) > 5 and ' ' in linha_limpa and
-            sum(c.isalpha() for c in linha_limpa) / len(linha_limpa.replace(" ", "")) > 0.8 and
+            sum(c.isalpha() for c in linha_limpa.replace(" ", "")) / len(linha_limpa.replace(" ", "")) > 0.8 and
             not any(h.upper() in linha_limpa.upper() for h in HEADERS) and
             not PADRAO_LOTE.match(linha_limpa) and
             not re.search(r'\d{2}/\d{2}/\d{4}', linha_limpa) and
@@ -146,19 +149,17 @@ def tentar_nome_cliente(bloco: str) -> str:
         )
         if is_valid_name:
             return linha_limpa
+            
     return "Nome não localizado"
 
 def extrair_parcelas(bloco: str):
-    """
-    Função corrigida para isolar a área de lançamentos e extrair as parcelas de forma mais precisa.
-    """
     itens = OrderedDict()
     
-    # Isola o bloco de texto que contém as parcelas, começando após "Lançamentos".
+    # Isola a área de Lançamentos para focar a busca
     pos_lancamentos = bloco.find("Lançamentos")
-    bloco_de_trabalho = bloco[pos_lancamentos + len("Lançamentos"):] if pos_lancamentos != -1 else bloco
+    bloco_de_trabalho = bloco[pos_lancamentos:] if pos_lancamentos != -1 else bloco
 
-    # Pré-processamento para remover colunas de resumo financeiro que aparecem na mesma linha.
+    # Remove a coluna da direita ("DÉBITOS DO MÊS ANTERIOR", etc.)
     bloco_limpo_linhas = []
     for linha in bloco_de_trabalho.splitlines():
         match = re.search(r'\s{4,}(DÉBITOS DO MÊS ANTERIOR|ENCARGOS POR ATRASO|PAGAMENTO EFETUADO)', linha)
@@ -168,14 +169,14 @@ def extrair_parcelas(bloco: str):
             bloco_limpo_linhas.append(linha)
     bloco_limpo = "\n".join(bloco_limpo_linhas)
 
-    # Lógica 1: Captura parcelas e valores na mesma linha.
+    # Extrai parcelas na mesma linha (padrão principal)
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1))
         val = to_float(m.group(2))
         if lbl and lbl not in itens and val is not None:
             itens[lbl] = val
 
-    # Lógica 2: Captura parcelas cujo valor está na linha seguinte.
+    # Extrai parcelas onde o valor está na linha de baixo (padrão alternativo)
     linhas = bloco_limpo.splitlines()
     for i, linha in enumerate(linhas):
         linha_limpa = linha.strip()
@@ -191,6 +192,7 @@ def extrair_parcelas(bloco: str):
 
         if is_potential_label:
             j = i + 1
+            # Procura a próxima linha não vazia
             while j < len(linhas) and not linhas[j].strip():
                 j += 1
             if j < len(linhas):
