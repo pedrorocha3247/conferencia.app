@@ -150,14 +150,17 @@ def tentar_nome_cliente(bloco: str) -> str:
 
 def extrair_parcelas(bloco: str):
     """
-    Função reescrita para extrair parcelas de forma mais confiável,
-    lidando com diferentes layouts e limpando colunas de resumo.
+    Função corrigida para isolar a área de lançamentos e extrair as parcelas de forma mais precisa.
     """
     itens = OrderedDict()
-    bloco_limpo_linhas = []
     
-    # Pré-processamento para remover colunas de resumo que aparecem na mesma linha
-    for linha in bloco.splitlines():
+    # Isola o bloco de texto que contém as parcelas, começando após "Lançamentos".
+    pos_lancamentos = bloco.find("Lançamentos")
+    bloco_de_trabalho = bloco[pos_lancamentos + len("Lançamentos"):] if pos_lancamentos != -1 else bloco
+
+    # Pré-processamento para remover colunas de resumo financeiro que aparecem na mesma linha.
+    bloco_limpo_linhas = []
+    for linha in bloco_de_trabalho.splitlines():
         match = re.search(r'\s{4,}(DÉBITOS DO MÊS ANTERIOR|ENCARGOS POR ATRASO|PAGAMENTO EFETUADO)', linha)
         if match:
             bloco_limpo_linhas.append(linha[:match.start()])
@@ -165,21 +168,20 @@ def extrair_parcelas(bloco: str):
             bloco_limpo_linhas.append(linha)
     bloco_limpo = "\n".join(bloco_limpo_linhas)
 
-    # Lógica 1: Captura parcelas e valores na mesma linha
+    # Lógica 1: Captura parcelas e valores na mesma linha.
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1))
         val = to_float(m.group(2))
         if lbl and lbl not in itens and val is not None:
             itens[lbl] = val
 
-    # Lógica 2: Captura parcelas cujo valor está na linha seguinte
+    # Lógica 2: Captura parcelas cujo valor está na linha seguinte.
     linhas = bloco_limpo.splitlines()
     for i, linha in enumerate(linhas):
         linha_limpa = linha.strip()
         if not linha_limpa:
             continue
 
-        # Verifica se a linha parece ser um rótulo de parcela que ainda não foi capturado
         is_potential_label = (
             any(c.isalpha() for c in linha_limpa) and
             not any(h.upper() in linha_limpa.upper() for h in HEADERS) and
@@ -188,7 +190,6 @@ def extrair_parcelas(bloco: str):
         )
 
         if is_potential_label:
-            # Procura por um número na próxima linha não-vazia
             j = i + 1
             while j < len(linhas) and not linhas[j].strip():
                 j += 1
