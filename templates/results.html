@@ -22,19 +22,25 @@
   }
 
   /* Alinhamento por coluna (ajuste os índices se mudar a ordem) */
-  /* 1 Empreendimento | 2 Lote | 3 Cliente | 4 Parcela -> texto à esquerda */
-  .table th:nth-child(1), .table td:nth-child(1),
-  .table th:nth-child(2), .table td:nth-child(2),
-  .table th:nth-child(3), .table td:nth-child(3),
-  .table th:nth-child(4), .table td:nth-child(4) {
-    text-align: left;
-  }
+/* Centralizar 1ª (Empreendimento), 5ª e 6ª (valores) */
+.table-container table th:nth-child(1),
+.table-container table td:nth-child(1),
+.table-container table th:nth-child(5),
+.table-container table td:nth-child(5),
+.table-container table th:nth-child(6),
+.table-container table td:nth-child(6) {
+  text-align: center;
+}
 
-  /* 5 Valor no Documento | 6 Valor Correto -> números à direita */
-  .table th:nth-child(5), .table td:nth-child(5),
-  .table th:nth-child(6), .table td:nth-child(6) {
-    text-align: right;
-  }
+/* Esquerda para Lote, Cliente, Parcela (2–4) */
+.table-container table th:nth-child(2),
+.table-container table td:nth-child(2),
+.table-container table th:nth-child(3),
+.table-container table td:nth-child(3),
+.table-container table th:nth-child(4),
+.table-container table td:nth-child(4) {
+  text-align: left;
+}
 </style>
 </head>
 <body>
@@ -95,5 +101,6 @@
 
 </body>
 </html>
+
 
 
