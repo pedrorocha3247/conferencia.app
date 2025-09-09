@@ -20,7 +20,6 @@ HEADERS = (
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
 
-# CORREÇÃO: Padrão de lote abrangente para todos os formatos, incluindo caracteres gregos e numéricos.
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.(?:[A-Z\u0399\u039A]{2}|\d{2})\.\d{1,4})\b")
 
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
@@ -124,14 +123,10 @@ def fatiar_blocos(texto: str):
     return blocos
 
 def tentar_nome_cliente(bloco: str) -> str:
-    """
-    Função aprimorada para encontrar o nome do cliente de forma mais robusta.
-    """
     linhas = bloco.split('\n')
     if not linhas:
         return "Nome não localizado"
 
-    # Tentativa 1: Nome na mesma linha do lote
     primeira_linha = linhas[0].strip()
     match_lote = PADRAO_LOTE.match(primeira_linha)
     if match_lote:
@@ -139,54 +134,66 @@ def tentar_nome_cliente(bloco: str) -> str:
         if len(nome_candidato) > 4 and ' ' in nome_candidato and not any(h.upper() in nome_candidato.upper() for h in HEADERS):
             return nome_candidato
 
-    # Tentativa 2: Nome nas linhas seguintes, com validação mais estrita
     for linha in linhas[1:5]:
         linha_limpa = linha.strip()
-        
         is_valid_name = (
-            len(linha_limpa) > 5 and
-            ' ' in linha_limpa and
-            sum(c.isalpha() for c in linha_limpa) / len(linha_limpa.replace(" ", "")) > 0.8 and # Alta proporção de letras
+            len(linha_limpa) > 5 and ' ' in linha_limpa and
+            sum(c.isalpha() for c in linha_limpa) / len(linha_limpa.replace(" ", "")) > 0.8 and
             not any(h.upper() in linha_limpa.upper() for h in HEADERS) and
             not PADRAO_LOTE.match(linha_limpa) and
             not re.search(r'\d{2}/\d{2}/\d{4}', linha_limpa) and
             not linha_limpa.upper().startswith("TOTAL")
         )
-        
         if is_valid_name:
             return linha_limpa
-
     return "Nome não localizado"
 
-
 def extrair_parcelas(bloco: str):
+    """
+    Função reescrita para extrair parcelas de forma mais confiável,
+    lidando com diferentes layouts e limpando colunas de resumo.
+    """
     itens = OrderedDict()
+    bloco_limpo_linhas = []
     
-    linhas_limpas = []
+    # Pré-processamento para remover colunas de resumo que aparecem na mesma linha
     for linha in bloco.splitlines():
-        linha_processada = re.split(r'\s{4,}', linha)[0]
-        linhas_limpas.append(linha_processada.strip())
-    bloco_limpo = "\n".join(linhas_limpas)
-    
+        match = re.search(r'\s{4,}(DÉBITOS DO MÊS ANTERIOR|ENCARGOS POR ATRASO|PAGAMENTO EFETUADO)', linha)
+        if match:
+            bloco_limpo_linhas.append(linha[:match.start()])
+        else:
+            bloco_limpo_linhas.append(linha)
+    bloco_limpo = "\n".join(bloco_limpo_linhas)
+
+    # Lógica 1: Captura parcelas e valores na mesma linha
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
-        lbl = limpar_rotulo(m.group(1)); val = to_float(m.group(2))
+        lbl = limpar_rotulo(m.group(1))
+        val = to_float(m.group(2))
         if lbl and lbl not in itens and val is not None:
             itens[lbl] = val
-            
+
+    # Lógica 2: Captura parcelas cujo valor está na linha seguinte
     linhas = bloco_limpo.splitlines()
     for i, linha in enumerate(linhas):
         linha_limpa = linha.strip()
-        if not linha_limpa: continue
+        if not linha_limpa:
+            continue
 
-        is_label = (
+        # Verifica se a linha parece ser um rótulo de parcela que ainda não foi capturado
+        is_potential_label = (
             any(c.isalpha() for c in linha_limpa) and
             not any(h.upper() in linha_limpa.upper() for h in HEADERS) and
-            limpar_rotulo(linha_limpa) not in itens
+            limpar_rotulo(linha_limpa) not in itens and
+            not PADRAO_PARCELA_MESMA_LINHA.match(linha_limpa)
         )
 
-        if is_label and not PADRAO_NUMERO_PURO.match(linha_limpa):
-            if i + 1 < len(linhas):
-                proxima_linha = linhas[i+1].strip()
+        if is_potential_label:
+            # Procura por um número na próxima linha não-vazia
+            j = i + 1
+            while j < len(linhas) and not linhas[j].strip():
+                j += 1
+            if j < len(linhas):
+                proxima_linha = linhas[j].strip()
                 match_num = PADRAO_NUMERO_PURO.match(proxima_linha)
                 if match_num:
                     lbl = limpar_rotulo(linha_limpa)
@@ -199,12 +206,10 @@ def extrair_parcelas(bloco: str):
 
 def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
     blocos = fatiar_blocos(texto_pdf)
-    
     if not blocos:
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     linhas_todas, linhas_cov, linhas_div = [], [], []
-
     for lote, bloco in blocos:
         emp_atual = emp_fixo if modo_separacao == 'boleto' else detectar_emp_por_lote(lote)
         cliente = tentar_nome_cliente(bloco)
