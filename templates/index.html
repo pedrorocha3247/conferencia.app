@@ -1,29 +1,70 @@
 <!DOCTYPE html>
-<html lang="pt-br">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Conferência de Extratos</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <title>Validador de Remessas</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; }
-        .container { max-width: 600px; margin-top: 5rem; }
-        .card { padding: 2rem; }
+        body {
+            background-color: #f8f9fa;
+        }
+        .container {
+            max-width: 600px;
+            margin-top: 50px;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+        }
+        .card-header {
+            background-color: #0d6efd;
+            color: white;
+            font-weight: bold;
+        }
+        .form-check-label {
+            cursor: pointer;
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="card shadow-sm">
-            <h1 class="text-center mb-4">Analisador de Extratos</h1>
-            <p class="text-center text-muted mb-4">Faça o upload do arquivo PDF para conferir as divergências.</p>
-            <form action="/upload" method="post" enctype="multipart/form-data">
-                <div class="mb-3">
-                    <input class="form-control" type="file" name="pdf_file" accept=".pdf" required>
-                </div>
-                <div class="d-grid">
-                    <button type="submit" class="btn btn-primary btn-lg">Analisar Arquivo</button>
-                </div>
-            </form>
+        <div class="card">
+            <div class="card-header text-center">
+                <h2>Validador de Remessas PDF</h2>
+            </div>
+            <div class="card-body">
+                <p class="card-text text-muted">Selecione o modo de processamento e envie o arquivo PDF para análise.</p>
+                
+                <form action="/upload" method="post" enctype="multipart/form-data">
+                    <div class="mb-3">
+                        <label for="modo_separacao" class="form-label fw-bold">1. Escolha o Modo de Análise:</label>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="modo_separacao" id="modo_boleto" value="boleto" checked>
+                            <label class="form-check-label" for="modo_boleto">
+                                <strong>Boleto</strong> <br>
+                                <small class="text-muted">Analisa um arquivo por vez. O empreendimento é identificado pelo nome do arquivo (ex: `Extrato_IATE.pdf`).</small>
+                            </label>
+                        </div>
+                        <div class="form-check mt-2">
+                            <input class="form-check-input" type="radio" name="modo_separacao" id="modo_debito_credito" value="debito_credito">
+                            <label class="form-check-label" for="modo_debito_credito">
+                                <strong>Débito/Crédito</strong> <br>
+                                <small class="text-muted">Analisa um arquivo com múltiplos empreendimentos misturados. A separação é feita pelos 2 primeiros dígitos do lote de cada registro.</small>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="mb-3 mt-4">
+                        <label for="pdf_file" class="form-label fw-bold">2. Envie o Arquivo PDF:</label>
+                        <input type="file" class="form-control" name="pdf_file" id="pdf_file" accept=".pdf" required>
+                    </div>
+
+                    <div class="d-grid mt-4">
+                        <button type="submit" class="btn btn-primary btn-lg">Validar Arquivo</button>
+                    </div>
+                </form>
+            </div>
         </div>
     </div>
 </body>
