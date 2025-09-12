@@ -12,18 +12,18 @@ from flask import Flask, render_template, request, send_file, url_for
 from openpyxl.styles import NamedStyle
 import logging
 
-# Configuração do Log para o console (visível na aba "Logs" da Render)
+# Configuração do Log (inalterada)
 handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
-logger.handlers.clear() # Garante que não haja handlers duplicados
+logger.handlers.clear()
 logger.addHandler(handler)
 
 
-# ==== Constantes e Mapeamentos ====
-
+# ==== Constantes e Mapeamentos (inalterados) ====
+# ... (código existente)
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
 HEADERS = (
     "Remessa para Conferência", "Página", "Banco", "IMOBILIARIOS", "Débitos do Mês",
@@ -69,8 +69,9 @@ BASE_FIXOS = {
     "Contribuição ABRASMA - Ouro": [60.00],
 }
 
-# ==== Funções de Normalização e Extração ====
 
+# ==== Funções (inalteradas) ====
+# ... (todo o resto do código de funções permanece o mesmo)
 def normalizar_texto(s: str) -> str:
     s = s.translate(DASHES).replace("\u00A0", " ")
     s = "".join(ch for ch in s if ch not in "\u200B\u200C\u200D\uFEFF")
@@ -93,7 +94,6 @@ def to_float(s: str):
     except (ValueError, TypeError):
         return None
 
-# ==== Funções de Lógica e Classificação ====
 def fixos_do_emp(emp: str):
     if emp not in EMP_MAP:
         return BASE_FIXOS
@@ -117,7 +117,6 @@ def detectar_emp_por_lote(lote: str):
     prefixo = lote.split('.')[0]
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
-# ==== Funções de Extração de Dados ====
 def limpar_rotulo(lbl: str) -> str:
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
@@ -159,6 +158,7 @@ def tentar_nome_cliente(bloco: str) -> str:
             return linha_limpa
     return "Nome não localizado"
 
+
 def extrair_parcelas(bloco: str):
     itens = OrderedDict()
     
@@ -174,24 +174,20 @@ def extrair_parcelas(bloco: str):
             bloco_limpo_linhas.append(linha)
     bloco_limpo = "\n".join(bloco_limpo_linhas)
 
-    # Lógica 1: Captura parcelas e valores na mesma linha.
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1))
-        # ALTERAÇÃO: Ignorar o campo DESCONTO
         if 'DESCONTO' in lbl.upper():
             continue
         val = to_float(m.group(2))
         if lbl and lbl not in itens and val is not None:
             itens[lbl] = val
 
-    # Lógica 2: Captura parcelas cujo valor está na linha seguinte.
     linhas = bloco_limpo.splitlines()
     for i, linha in enumerate(linhas):
         linha_limpa = linha.strip()
         if not linha_limpa:
             continue
         
-        # ALTERAÇÃO: Ignorar o campo DESCONTO também nesta lógica
         if 'DESCONTO' in linha_limpa.upper():
             continue
 
@@ -215,8 +211,6 @@ def extrair_parcelas(bloco: str):
                     if lbl and lbl not in itens and val is not None:
                         itens[lbl] = val
     return itens
-
-# ==== Função de Processamento Principal ====
 
 def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
     blocos = fatiar_blocos(texto_pdf)
@@ -286,7 +280,6 @@ def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
     
     return df_todas, df_cov, df_div, df_erros
 
-# ==== Funções de Formatação do Excel ====
 def formatar_excel(output_stream, dfs: dict):
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
         for sheet_name, df in dfs.items():
@@ -351,14 +344,13 @@ def upload_file():
 
             df_todas, df_cov, df_div, df_erros = processar_pdf(texto_pdf, modo_separacao, emp_fixo)
             
+            # Ordenação dos dataframes
             if not df_div.empty: df_div = df_div.sort_values(by=['Empreendimento', 'Lote'])
             if not df_cov.empty: df_cov = df_cov.sort_values(by=['Empreendimento', 'Lote'])
             if not df_todas.empty: df_todas = df_todas.sort_values(by=['Empreendimento', 'Lote'])
 
+            # Geração do Excel
             output = io.BytesIO()
-            
-            # ALTERAÇÃO: Cria o dicionário para o Excel de forma ordenada
-            # e adiciona a aba de erros condicionalmente no final.
             dfs_to_excel = OrderedDict([
                 ("Divergencias", df_div),
                 ("Cobertura_Analise", df_cov),
@@ -366,20 +358,22 @@ def upload_file():
             ])
             if not df_erros.empty:
                 dfs_to_excel["Lotes_Com_Erro"] = df_erros
-            
             formatar_excel(output, dfs_to_excel)
             output.seek(0)
 
+            # Salvar Relatório
             base_name = os.path.splitext(file.filename)[0]
             report_filename = f"relatorio_{base_name}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
-            
             with open(report_path, 'wb') as f: f.write(output.getvalue())
             logger.info(f"Relatório salvo com sucesso em '{report_path}'.")
+            
+            # ALTERAÇÃO: Converter DataFrames para JSON em vez de HTML
+            # O formato 'split' é ótimo pois separa colunas e dados, facilitando o uso no JS
+            divergencias_json = df_div.to_json(orient="split", index=False) if not df_div.empty else None
+            erros_json = df_erros.to_json(orient="split", index=False) if not df_erros.empty else None
 
-            div_html = df_div.to_html(classes='table table-striped table-hover', index=False, border=0) if not df_div.empty else "<p>Nenhuma divergência encontrada.</p>"
-            erros_html = df_erros.to_html(classes='table table-danger table-striped table-hover', index=False, border=0) if not df_erros.empty else ""
-
+            # Cálculo dos totais
             total_lotes = len(df_cov)
             total_divergencias = len(df_div)
             nao_classificados = len(df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO']) if not df_cov.empty else 0
@@ -388,14 +382,15 @@ def upload_file():
             logger.info(f"Análise de '{file.filename}' concluída. Lotes: {total_lotes}, Divergências: {total_divergencias}, Não Classificados: {nao_classificados}, Erros: {total_erros}.")
 
             return render_template('results.html',
-                                   table=div_html,
                                    total_lotes=total_lotes,
                                    total_divergencias=total_divergencias,
                                    nao_classificados=nao_classificados,
                                    total_erros=total_erros,
-                                   erros_html=erros_html,
                                    download_url=url_for('download_file', filename=report_filename),
-                                   modo_usado=modo_separacao)
+                                   modo_usado=modo_separacao,
+                                   # ALTERAÇÃO: Passar os dados JSON para o template
+                                   divergencias_json=divergencias_json,
+                                   erros_json=erros_json)
         
         except Exception:
             logger.exception(f"Ocorreu um erro inesperado e fatal durante o processamento do arquivo '{file.filename}'.")
@@ -413,3 +408,4 @@ def download_file(filename):
 if __name__ == '__main__':
     logger.info("Iniciando a aplicação Flask em modo de desenvolvimento.")
     app.run(debug=True, host='0.0.0.0', port=8080)
+
