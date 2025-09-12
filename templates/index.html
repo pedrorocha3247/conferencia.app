@@ -1,32 +1,18 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-bs-theme="dark"> <!-- Adiciona o atributo para temas escuros -->
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Validador de Remessas</title>
     
-    <!-- 
-      ALTERE AQUI PARA MUDAR O TEMA 
-      Basta trocar a palavra 'minty' pelo nome do tema que você escolheu no site Bootswatch.com
-      
-      Exemplos de temas:
-      - Tema escuro:   https://bootswatch.com/5/darkly/bootstrap.min.css
-      - Tema moderno:   https://bootswatch.com/5/lux/bootstrap.min.css
-      - Tema divertido: https://bootswatch.com/5/sketchy/bootstrap.min.css
-    -->
-    <link href=" https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet"/>
+    <!-- Link para o CSS do tema Superhero -->
+    <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
     
+    <!-- Estilos específicos da sua aplicação -->
     <style>
-        body {
-            background-color: #f8f9fa;
-        }
         .container {
             max-width: 600px;
             margin-top: 50px;
-        }
-        .card {
-            border: none;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.1);
         }
         .card-header {
             font-weight: bold;
@@ -34,28 +20,41 @@
         .form-check-label {
             cursor: pointer;
         }
+        /* ALTERAÇÃO: Estilo para o logótipo */
+        .company-logo {
+            display: block;
+            margin: 0 auto 30px auto; /* Centra o logótipo e adiciona espaço abaixo */
+            max-height: 80px; /* Define uma altura máxima para o logótipo */
+            width: auto; /* Mantém a proporção da imagem */
+        }
     </style>
 </head>
 <body>
     <div class="container">
-        <div class="card">
+
+        <!-- ALTERAÇÃO: Adiciona a imagem do logótipo aqui -->
+        <div>
+            <img src="https://i.postimg.cc/0N8p5Yk7/download.png" alt="Logótipo da Empresa" class="company-logo">
+        </div>
+
+        <div class="card border-primary mb-3">
             <div class="card-header text-center">
                 <h2>Validador de Remessas</h2>
             </div>
             <div class="card-body">
-                <p class="card-text text-muted">Selecione o modo de processamento e envie o arquivo PDF para análise.</p>
+                <p class="card-text text-muted mb-4">Selecione o modo de processamento e envie o arquivo PDF para análise.</p>
                 
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <div class="mb-3">
-                        <label for="modo_separacao" class="form-label fw-bold">1. Escolha o Modo de Análise:</label>
-                        <div class="form-check">
+                        <label class="form-label fw-bold">1. Escolha o Modo de Análise:</label>
+                        <div class="form-check mb-2">
                             <input class="form-check-input" type="radio" name="modo_separacao" id="modo_boleto" value="boleto" checked>
                             <label class="form-check-label" for="modo_boleto">
                                 <strong>Boleto</strong> <br>
                                 <small class="text-muted">Analisa os arquivos referente as remessas de Boleto.</small>
                             </label>
                         </div>
-                        <div class="form-check mt-2">
+                        <div class="form-check">
                             <input class="form-check-input" type="radio" name="modo_separacao" id="modo_debito_credito" value="debito_credito">
                             <label class="form-check-label" for="modo_debito_credito">
                                 <strong>Débito/Crédito</strong> <br>
@@ -93,13 +92,4 @@
     </script>
 </body>
 </html>
-
-
-
-
-
-
-
-
-
 
