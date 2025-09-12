@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-bs-theme="dark"> <!-- Adiciona o atributo para temas escuros -->
+<html lang="pt-BR" data-bs-theme="dark"> <!-- Atributo para temas escuros -->
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Resultados da Validação</title>
 
-<!-- Link para o CSS do tema Superhero -->
+<!-- Link para o CSS do tema Cyborg -->
 <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
 
 <!-- CSS do DataTables para Bootstrap 5 -->
@@ -16,34 +16,28 @@
   body { 
     padding-bottom: 50px;
   }
+
+  /* ALTERAÇÃO 1: Remove as bordas finas dos cards no tema Cyborg */
+  .card {
+      border: none;
+  }
+
   .card-header {
       font-weight: bold;
   }
-  /* ALTERAÇÃO: Estilo para o logótipo */
-  .company-logo {
-      display: block;
-      margin: 0 auto 30px auto; /* Centra o logótipo e adiciona espaço abaixo */
-      max-height: 70px; /* Define uma altura máxima para o logótipo */
-      width: auto; /* Mantém a proporção da imagem */
-  }
-  /* Ajusta o cabeçalho principal para alinhar com o logótipo */
-  .main-header {
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      margin-bottom: 1.5rem;
+  
+  /* ALTERAÇÃO 2: Estilo para o logótipo no cabeçalho */
+  .header-logo {
+      max-height: 50px; /* Ajuste a altura conforme necessário */
+      width: auto;
   }
 </style>
 </head>
 <body>
 <div class="container-fluid mt-4 px-4">
-    <!-- ALTERAÇÃO: Adiciona o logótipo no cabeçalho -->
-    <div class="text-center mb-4">
-        <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logótipo da Empresa" class="company-logo">
-    </div>
-
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <h2>Resultados da Validação</h2>
+    <!-- ALTERAÇÃO 3: Cabeçalho modificado para ter o logótipo no lugar do título -->
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <img src="<!-- COLE AQUI O LINK DIRETO DO SEU LOGÓTIPO -->" alt="Logótipo da Empresa" class="header-logo">
         <a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
     </div>
 
@@ -163,6 +157,4 @@ $(document).ready(function() {
 
 </body>
 </html>
-
-
 
