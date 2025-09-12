@@ -73,7 +73,6 @@
             <h4>Tabela de Lotes com Erro no Processamento</h4>
         </div>
         <div class="card-body">
-            <!-- ALTERAÇÃO: Estrutura da tabela vazia, pronta para o DataTables -->
             <table id="tabela-erros" class="table table-striped" style="width:100%">
                 <thead>
                     <tr>
@@ -82,7 +81,6 @@
                     </tr>
                 </thead>
                 <tbody>
-                    <!-- O JavaScript irá popular esta seção -->
                 </tbody>
             </table>
         </div>
@@ -96,7 +94,6 @@
         </div>
         <div class="card-body">
             {% if total_divergencias > 0 %}
-                <!-- ALTERAÇÃO: Estrutura da tabela vazia -->
                 <table id="tabela-divergencias" class="table table-striped" style="width:100%">
                     <thead>
                         <tr>
@@ -109,7 +106,6 @@
                         </tr>
                     </thead>
                     <tbody>
-                        <!-- O JavaScript irá popular esta seção -->
                     </tbody>
                 </table>
             {% else %}
@@ -126,11 +122,9 @@
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
-<!-- ALTERAÇÃO: Script para inicializar as tabelas com os dados JSON -->
 <script>
 $(document).ready(function() {
     
-    // Configuração de tradução para Português-Brasil
     const ptBrLang = {
         "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json"
     };
@@ -140,13 +134,15 @@ $(document).ready(function() {
     if (divergenciasData) {
         $('#tabela-divergencias').DataTable({
             data: divergenciasData.data,
+            // ALTERAÇÃO: Usar nomes de colunas em minúsculas para corresponder ao JSON
             columns: [
-                { data: 'Empreendimento' },
-                { data: 'Lote' },
-                { data: 'Cliente' },
-                { data: 'Parcela' },
-                { data: 'Valor no Documento', render: $.fn.dataTable.render.number('.', ',', 2, 'R$ ') },
-                { data: 'Valor Correto' }
+                { data: 'empreendimento' },
+                { data: 'lote' },
+                { data: 'cliente' },
+                { data: 'parcela' },
+                // O Pandas também converte espaços e maiúsculas para snake_case
+                { data: 'valor no documento', render: $.fn.dataTable.render.number('.', ',', 2, 'R$ ') },
+                { data: 'valor correto' }
             ],
             language: ptBrLang
         });
@@ -157,9 +153,10 @@ $(document).ready(function() {
     if (errosData) {
         $('#tabela-erros').DataTable({
             data: errosData.data,
+            // ALTERAÇÃO: Usar nomes de colunas em minúsculas
             columns: [
-                { data: 'Lote' },
-                { data: 'Erro' }
+                { data: 'lote' },
+                { data: 'erro' }
             ],
             language: ptBrLang
         });
@@ -169,3 +166,4 @@ $(document).ready(function() {
 
 </body>
 </html>
+
