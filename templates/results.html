@@ -1,58 +1,78 @@
 <!DOCTYPE html>
-<html lang="pt-BR">
+<html lang="pt-BR" data-bs-theme="dark"> <!-- Adiciona o atributo para temas escuros -->
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Resultados da Validação</title>
-<!-- CSS do Bootstrap e Bootswatch para um visual melhorado -->
-<link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
+
+<!-- Link para o CSS do tema Superhero -->
+<link href="https://bootswatch.com/5/morph/bootstrap.min.css" rel="stylesheet">
+
 <!-- CSS do DataTables para Bootstrap 5 -->
-<link href=" https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet"/>
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
 
 <style>
   /* Pequenos ajustes visuais */
   body { 
-    background-color: #f8f9fa; 
     padding-bottom: 50px;
   }
   .card-header {
       font-weight: bold;
   }
+  /* ALTERAÇÃO: Estilo para o logótipo */
+  .company-logo {
+      display: block;
+      margin: 0 auto 30px auto; /* Centra o logótipo e adiciona espaço abaixo */
+      max-height: 70px; /* Define uma altura máxima para o logótipo */
+      width: auto; /* Mantém a proporção da imagem */
+  }
+  /* Ajusta o cabeçalho principal para alinhar com o logótipo */
+  .main-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 1.5rem;
+  }
 </style>
 </head>
 <body>
 <div class="container-fluid mt-4 px-4">
+    <!-- ALTERAÇÃO: Adiciona o logótipo no cabeçalho -->
+    <div class="text-center mb-4">
+        <img src="https://i.postimg.cc/0N8p5Yk7/download.png" alt="Logótipo da Empresa" class="company-logo">
+    </div>
+
     <div class="d-flex justify-content-between align-items-center mb-3">
         <h2>Resultados da Validação</h2>
         <a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
     </div>
 
-    <!-- Quadro de Resumo (inalterado) -->
-    <div class="card mb-4">
+    <!-- Quadro de Resumo -->
+    <div class="card border-primary mb-4">
         <div class="card-body summary-card">
             <h5 class="card-title mb-3">Resumo da Análise</h5>
             <div class="row text-center">
-                <div class="col-md-3 summary-item border-end">
+                <div class="col-md-3 summary-item border-end border-secondary">
                     <strong class="text-uppercase">Modo de Análise</strong>
                     <div><span class="badge bg-primary fs-6 mt-1">{{ modo_usado.replace('_', '/').title() }}</span></div>
                 </div>
-                <div class="col-md-3 summary-item border-end">
+                <div class="col-md-3 summary-item border-end border-secondary">
                     <strong class="text-uppercase">Total de Lotes Processados</strong>
                     <div><span class="badge bg-secondary fs-6 mt-1">{{ total_lotes }}</span></div>
                 </div>
-                <div class="col-md-3 summary-item border-end">
+                <div class="col-md-3 summary-item border-end border-secondary">
                     <strong class="text-uppercase">Total de Divergências</strong>
                     <div><span class="badge bg-danger fs-6 mt-1">{{ total_divergencias }}</span></div>
                 </div>
-                <div class="col-md-3 summary-item {% if nao_classificados > 0 %}border-end{% endif %}">
+                <div class="col-md-3 summary-item {% if nao_classificados > 0 %}border-end border-secondary{% endif %}">
                     <strong class="text-uppercase">Lotes com Erro</strong>
-                    <div><span class="badge {% if total_erros > 0 %}bg-dark{% else %}bg-secondary{% endif %} fs-6 mt-1">{{ total_erros }}</span></div>
+                    <div><span class="badge {% if total_erros > 0 %}bg-light text-dark{% else %}bg-secondary{% endif %} fs-6 mt-1">{{ total_erros }}</span></div>
                 </div>
 
                 {% if nao_classificados > 0 %}
                 <div class="col-md-3 summary-item">
                     <strong class="text-uppercase">Lotes Não Classificados</strong>
-                    <div><span class="badge bg-warning text-dark fs-6 mt-1">{{ nao_classificados }}</span></div>
+                    <div><span class="badge bg-warning fs-6 mt-1">{{ nao_classificados }}</span></div>
                 </div>
                 {% endif %}
             </div>
@@ -68,8 +88,8 @@
     
     <!-- Tabela de Lotes com Erro -->
     {% if total_erros > 0 %}
-    <div class="card mb-4">
-        <div class="card-header bg-dark text-white">
+    <div class="card border-light mb-4">
+        <div class="card-header bg-light text-dark">
             <h4>Tabela de Lotes com Erro no Processamento</h4>
         </div>
         <div class="card-body">
@@ -81,7 +101,7 @@
     {% endif %}
 
     <!-- Tabela de Divergências -->
-    <div class="card">
+    <div class="card border-info">
         <div class="card-header">
             <h4>Tabela de Divergências</h4>
         </div>
@@ -111,35 +131,30 @@ $(document).ready(function() {
         "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json"
     };
 
-    // Função para capitalizar a primeira letra de cada palavra
     function toTitleCase(str) {
         return str.replace(/\w\S*/g, function(txt){
             return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
         });
     }
 
-    // Inicializa a tabela de divergências se os dados existirem
     const divergenciasData = {{ divergencias_json|safe }};
     if (divergenciasData) {
-        // CORREÇÃO: Mapeia os nomes das colunas para o formato de título
         const divergenciasColumns = divergenciasData.columns.map(col => ({ title: toTitleCase(col) }));
 
         $('#tabela-divergencias').DataTable({
             data: divergenciasData.data,
-            columns: divergenciasColumns, // Usa as colunas mapeadas
+            columns: divergenciasColumns,
             language: ptBrLang
         });
     }
 
-    // Inicializa a tabela de erros se os dados existirem
     const errosData = {{ erros_json|safe }};
     if (errosData) {
-        // CORREÇÃO: Mapeia os nomes das colunas para o formato de título
         const errosColumns = errosData.columns.map(col => ({ title: toTitleCase(col) }));
 
         $('#tabela-erros').DataTable({
             data: errosData.data,
-            columns: errosColumns, // Usa as colunas mapeadas
+            columns: errosColumns,
             language: ptBrLang
         });
     }
@@ -148,16 +163,4 @@ $(document).ready(function() {
 
 </body>
 </html>
-
-
-
-
-
-
-
-
-
-
-
-
 
