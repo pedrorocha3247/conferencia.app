@@ -1,55 +1,33 @@
 <!DOCTYPE html>
-
 <html lang="pt-BR">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Resultados da Validação</title>
-<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<!-- CSS do Bootstrap e Bootswatch para um visual melhorado -->
+<link href="https://bootswatch.com/5/minty/bootstrap.min.css" rel="stylesheet">
+<!-- CSS do DataTables para Bootstrap 5 -->
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+
 <style>
-  body { background-color: #65eccf; }
-  .table { font-size: 0.9rem; }
-  .table-container { max-height: 65vh; overflow-y: auto; }
-
-  /* Cabeçalho fixo — comentário CORRETO */
-  .table thead th {
-    position: sticky;
-    top: 0; /* Evita pequenos espaços */
-    background-color: #f8f9fa; /* Fundo do cabeçalho fixo */
-    vertical-align: middle;
-    z-index: 10;
-    box-shadow: 0 2px 2px -1px rgba(0,0,0,.1);
+  /* Pequenos ajustes visuais */
+  body { 
+    background-color: #f8f9fa; 
+    padding-bottom: 50px;
   }
-
-  /* Alinhamento por coluna (ajuste os índices se mudar a ordem) */
-/* Centralizar 1ª (Empreendimento), 5ª e 6ª (valores) */
-.table-container table th:nth-child(1),
-.table-container table td:nth-child(1),
-.table-container table th:nth-child(5),
-.table-container table td:nth-child(5),
-.table-container table th:nth-child(6),
-.table-container table td:nth-child(6) {
-  text-align: center;
-}
-
-/* Esquerda para Lote, Cliente, Parcela (2–4) */
-.table-container table th:nth-child(2),
-.table-container table td:nth-child(2),
-.table-container table th:nth-child(3),
-.table-container table td:nth-child(3),
-.table-container table th:nth-child(4),
-.table-container table td:nth-child(4) {
-  text-align: left;
-}
+  .card-header {
+      font-weight: bold;
+  }
 </style>
 </head>
 <body>
 <div class="container-fluid mt-4 px-4">
-<div class="d-flex justify-content-between align-items-center mb-3">
-<h2>Resultados da Validação</h2>
-<a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
-</div>
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <h2>Resultados da Validação</h2>
+        <a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
+    </div>
 
+    <!-- Quadro de Resumo (inalterado) -->
     <div class="card mb-4">
         <div class="card-body summary-card">
             <h5 class="card-title mb-3">Resumo da Análise</h5>
@@ -88,34 +66,106 @@
         </div>
     </div>
     
+    <!-- Tabela de Lotes com Erro -->
     {% if total_erros > 0 %}
     <div class="card mb-4">
         <div class="card-header bg-dark text-white">
             <h4>Tabela de Lotes com Erro no Processamento</h4>
         </div>
-        <div class="card-body p-0">
-            <div class="table-container">
-                {{ erros_html|safe }}
-            </div>
+        <div class="card-body">
+            <!-- ALTERAÇÃO: Estrutura da tabela vazia, pronta para o DataTables -->
+            <table id="tabela-erros" class="table table-striped" style="width:100%">
+                <thead>
+                    <tr>
+                        <th>Lote</th>
+                        <th>Erro</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <!-- O JavaScript irá popular esta seção -->
+                </tbody>
+            </table>
         </div>
     </div>
     {% endif %}
 
+    <!-- Tabela de Divergências -->
     <div class="card">
         <div class="card-header">
             <h4>Tabela de Divergências</h4>
         </div>
-        <div class="card-body p-0">
-            <div class="table-container">
-                {% if total_divergencias > 0 %}
-                    {{ table|safe }}
-                {% else %}
-                    <p class="text-center p-3">Nenhuma divergência encontrada nos arquivos analisados.</p>
-                {% endif %}
-            </div>
+        <div class="card-body">
+            {% if total_divergencias > 0 %}
+                <!-- ALTERAÇÃO: Estrutura da tabela vazia -->
+                <table id="tabela-divergencias" class="table table-striped" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>Empreendimento</th>
+                            <th>Lote</th>
+                            <th>Cliente</th>
+                            <th>Parcela</th>
+                            <th>Valor no Documento</th>
+                            <th>Valor Correto</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <!-- O JavaScript irá popular esta seção -->
+                    </tbody>
+                </table>
+            {% else %}
+                <p class="text-center p-3">Nenhuma divergência encontrada nos arquivos analisados.</p>
+            {% endif %}
         </div>
     </div>
 </div>
+
+<!-- Scripts Essenciais (jQuery e Bootstrap) -->
+<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<!-- Scripts do DataTables -->
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+<!-- ALTERAÇÃO: Script para inicializar as tabelas com os dados JSON -->
+<script>
+$(document).ready(function() {
+    
+    // Configuração de tradução para Português-Brasil
+    const ptBrLang = {
+        "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json"
+    };
+
+    // Inicializa a tabela de divergências se os dados existirem
+    const divergenciasData = {{ divergencias_json|safe }};
+    if (divergenciasData) {
+        $('#tabela-divergencias').DataTable({
+            data: divergenciasData.data,
+            columns: [
+                { data: 'Empreendimento' },
+                { data: 'Lote' },
+                { data: 'Cliente' },
+                { data: 'Parcela' },
+                { data: 'Valor no Documento', render: $.fn.dataTable.render.number('.', ',', 2, 'R$ ') },
+                { data: 'Valor Correto' }
+            ],
+            language: ptBrLang
+        });
+    }
+
+    // Inicializa a tabela de erros se os dados existirem
+    const errosData = {{ erros_json|safe }};
+    if (errosData) {
+        $('#tabela-erros').DataTable({
+            data: errosData.data,
+            columns: [
+                { data: 'Lote' },
+                { data: 'Erro' }
+            ],
+            language: ptBrLang
+        });
+    }
+});
+</script>
 
 </body>
 </html>
