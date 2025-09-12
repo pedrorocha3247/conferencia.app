@@ -66,17 +66,15 @@
                     <strong class="text-uppercase">Total de Divergências</strong>
                     <div><span class="badge bg-danger fs-6 mt-1">{{ total_divergencias }}</span></div>
                 </div>
+                <div class="col-md-3 summary-item {% if nao_classificados > 0 %}border-end{% endif %}">
+                    <strong class="text-uppercase">Lotes com Erro</strong>
+                    <div><span class="badge {% if total_erros > 0 %}bg-dark{% else %}bg-secondary{% endif %} fs-6 mt-1">{{ total_erros }}</span></div>
+                </div>
+
                 {% if nao_classificados > 0 %}
-                <div class="col-md-3 summary-item {% if total_erros == 0 %}border-end{% endif %}">
+                <div class="col-md-3 summary-item">
                     <strong class="text-uppercase">Lotes Não Classificados</strong>
                     <div><span class="badge bg-warning text-dark fs-6 mt-1">{{ nao_classificados }}</span></div>
-                </div>
-                {% endif %}
-                
-                {% if total_erros > 0 %}
-                <div class="col-md-3 summary-item">
-                    <strong class="text-uppercase">Lotes com Erro</strong>
-                    <div><span class="badge bg-dark fs-6 mt-1">{{ total_erros }}</span></div>
                 </div>
                 {% endif %}
             </div>
