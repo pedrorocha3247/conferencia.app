@@ -10,23 +10,21 @@ import pandas as pd
 from collections import OrderedDict
 from flask import Flask, render_template, request, send_file, url_for
 from openpyxl.styles import NamedStyle
-# ALTERAÇÃO 1: Importar o módulo logging e o handler de arquivo
 import logging
-from logging.handlers import RotatingFileHandler
+# import sys já é importado acima, então está ok.
 
-# ALTERAÇÃO 2: Configuração centralizada do logging
-# Configura o logger para salvar mensagens em um arquivo chamado 'app.log'
-# O arquivo terá no máximo 1MB e manterá um backup (rotate).
-handler = RotatingFileHandler('app.log', maxBytes=1000000, backupCount=1)
-# Define o formato da mensagem de log: [Timestamp] NIVEL: Mensagem
+# ALTERAÇÃO 1: Log configurado para o console (visível na aba "Logs" da Render)
+# Em vez de salvar em um arquivo, o log será enviado para a saída padrão.
+handler = logging.StreamHandler(sys.stdout)
 formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
 handler.setFormatter(formatter)
-# Cria o logger da aplicação e adiciona o handler configurado
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO) # Define INFO como o nível mínimo para registrar
+logger.setLevel(logging.INFO)
+logger.handlers.clear() # Garante que não haja handlers duplicados
 logger.addHandler(handler)
 
-# ==== Constantes e Mapeamentos ====
+
+# ==== Constantes e Mapeamentos (sem alterações) ====
 
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
 HEADERS = (
@@ -73,7 +71,7 @@ BASE_FIXOS = {
     "Contribuição ABRASMA - Ouro": [60.00],
 }
 
-# ==== Funções de Normalização e Extração ====
+# ==== Funções de Normalização e Extração (sem alterações) ====
 
 def normalizar_texto(s: str) -> str:
     s = s.translate(DASHES).replace("\u00A0", " ")
@@ -87,9 +85,8 @@ def extrair_texto_pdf(stream_pdf) -> str:
         texto = "\n".join(p.get_text("text", sort=True) for p in doc)
         doc.close()
         return normalizar_texto(texto)
-    except Exception as e:
-        # ALTERAÇÃO 3: Substitui print() por logger.exception()
-        logger.exception(f"Erro ao ler o stream do PDF: {e}")
+    except Exception:
+        logger.exception("Erro ao ler o stream do PDF.")
         return ""
 
 def to_float(s: str):
@@ -98,9 +95,9 @@ def to_float(s: str):
     except (ValueError, TypeError):
         return None
 
-# ==== Funções de Lógica e Classificação ====
-
+# ==== Funções de Lógica e Classificação (sem alterações) ====
 def fixos_do_emp(emp: str):
+    #... (código inalterado)
     if emp not in EMP_MAP:
         return BASE_FIXOS
     f = dict(BASE_FIXOS)
@@ -109,6 +106,7 @@ def fixos_do_emp(emp: str):
     return f
 
 def detectar_emp_por_nome_arquivo(path: str):
+    #... (código inalterado)
     nome = os.path.splitext(os.path.basename(path))[0].upper()
     if "SBRR" in nome:
         return "SBRR"
@@ -118,19 +116,21 @@ def detectar_emp_por_nome_arquivo(path: str):
     return None
 
 def detectar_emp_por_lote(lote: str):
+    #... (código inalterado)
     if not lote or "." not in lote:
         return "NAO_CLASSIFICADO"
     prefixo = lote.split('.')[0]
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
-# ==== Funções de Extração de Dados ====
-# (Nenhuma alteração de lógica nesta seção, as funções permanecem as mesmas)
+# ==== Funções de Extração de Dados (sem alterações) ====
 def limpar_rotulo(lbl: str) -> str:
+    #... (código inalterado)
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
     return lbl
 
 def fatiar_blocos(texto: str):
+    #... (código inalterado)
     texto_processado = PADRAO_LOTE.sub(r"\n\1", texto)
     ms = list(PADRAO_LOTE.finditer(texto_processado))
     blocos = []
@@ -141,7 +141,7 @@ def fatiar_blocos(texto: str):
     return blocos
 
 def tentar_nome_cliente(bloco: str) -> str:
-    # ... (código da função inalterado)
+    #... (código inalterado)
     linhas = bloco.split('\n')
     if not linhas:
         return "Nome não localizado"
@@ -168,7 +168,7 @@ def tentar_nome_cliente(bloco: str) -> str:
     return "Nome não localizado"
 
 def extrair_parcelas(bloco: str):
-    # ... (código da função inalterado)
+    #... (código inalterado)
     itens = OrderedDict()
     
     pos_lancamentos = bloco.find("Lançamentos")
@@ -216,56 +216,61 @@ def extrair_parcelas(bloco: str):
                         itens[lbl] = val
     return itens
 
-
 # ==== Função de Processamento Principal ====
 
 def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
     blocos = fatiar_blocos(texto_pdf)
-    # ALTERAÇÃO 4: Adiciona log com informações do processamento
     logger.info(f"Encontrados {len(blocos)} lotes para processamento.")
     if not blocos:
         logger.warning("Nenhum bloco de lote foi encontrado no PDF.")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    linhas_todas, linhas_cov, linhas_div = [], [], []
+    # ALTERAÇÃO 2: Adiciona lista para coletar lotes com erro
+    linhas_todas, linhas_cov, linhas_div, linhas_erros = [], [], [], []
+
     for lote, bloco in blocos:
-        emp_atual = emp_fixo if modo_separacao == 'boleto' else detectar_emp_por_lote(lote)
-        
-        if emp_atual == 'SBRR':
-            emp_especifico = detectar_emp_por_lote(lote)
-            if emp_especifico in ['SBRR I', 'SBRR II', 'SBRR III']:
-                emp_atual = emp_especifico
+        try: # ALTERAÇÃO 3: Inicia o bloco try para cada lote
+            emp_atual = emp_fixo if modo_separacao == 'boleto' else detectar_emp_por_lote(lote)
+            
+            if emp_atual == 'SBRR':
+                emp_especifico = detectar_emp_por_lote(lote)
+                if emp_especifico in ['SBRR I', 'SBRR II', 'SBRR III']:
+                    emp_atual = emp_especifico
 
-        cliente = tentar_nome_cliente(bloco)
-        itens = extrair_parcelas(bloco)
-        
-        VALORES_CORRETOS = fixos_do_emp(emp_atual)
+            cliente = tentar_nome_cliente(bloco)
+            itens = extrair_parcelas(bloco)
+            
+            VALORES_CORRETOS = fixos_do_emp(emp_atual)
 
-        for rot, val in itens.items():
-            linhas_todas.append({"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
+            for rot, val in itens.items():
+                linhas_todas.append({"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
 
-        cov = {"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente}
-        for k in VALORES_CORRETOS.keys(): cov[k] = None
-        
-        for rot, val in itens.items():
-            if rot in VALORES_CORRETOS:
-                cov[rot] = val
-        
-        vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
-        cov["QtdParc_Alvo"] = len(vistos)
-        cov["Parc_Alvo"] = ", ".join(vistos)
-        linhas_cov.append(cov)
+            cov = {"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente}
+            for k in VALORES_CORRETOS.keys(): cov[k] = None
+            
+            for rot, val in itens.items():
+                if rot in VALORES_CORRETOS:
+                    cov[rot] = val
+            
+            vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
+            cov["QtdParc_Alvo"] = len(vistos)
+            cov["Parc_Alvo"] = ", ".join(vistos)
+            linhas_cov.append(cov)
 
-        for rot in vistos:
-            val = cov[rot]
-            if val is None: continue
-            permitidos = VALORES_CORRETOS.get(rot, [])
-            if all(abs(val - v) > 1e-6 for v in permitidos):
-                linhas_div.append({
-                    "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
-                    "Parcela": rot, "Valor no Documento": float(val),
-                    "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
-                })
+            for rot in vistos:
+                val = cov[rot]
+                if val is None: continue
+                permitidos = VALORES_CORRETOS.get(rot, [])
+                if all(abs(val - v) > 1e-6 for v in permitidos):
+                    linhas_div.append({
+                        "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
+                        "Parcela": rot, "Valor no Documento": float(val),
+                        "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
+                    })
+        except Exception as e: # ALTERAÇÃO 4: Captura, registra o erro e continua
+            logger.exception(f"Falha ao processar o lote {lote}. O processamento continuará com o próximo.")
+            linhas_erros.append({"Lote": lote, "Erro": str(e)})
+            continue # Pula para o próximo lote
 
     vistos = set()
     linhas_div_dedup = []
@@ -278,12 +283,13 @@ def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
     df_todas = pd.DataFrame(linhas_todas)
     df_cov = pd.DataFrame(linhas_cov)
     df_div = pd.DataFrame(linhas_div_dedup)
+    df_erros = pd.DataFrame(linhas_erros) # ALTERAÇÃO 5: Cria o DataFrame de erros
     
-    return df_todas, df_cov, df_div
+    return df_todas, df_cov, df_div, df_erros # ALTERAÇÃO 6: Retorna o novo DataFrame
 
-# ==== Funções de Formatação do Excel ====
-
+# ==== Funções de Formatação do Excel (sem alterações) ====
 def formatar_excel(output_stream, dfs: dict):
+    #... (código inalterado)
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
         for sheet_name, df in dfs.items():
             df.to_excel(writer, index=False, sheet_name=sheet_name)
@@ -303,6 +309,7 @@ def formatar_excel(output_stream, dfs: dict):
                 worksheet.column_dimensions[column].width = adjusted_width
     return output_stream
 
+
 # --- Início da Aplicação Web Flask ---
 
 app = Flask(__name__)
@@ -319,7 +326,6 @@ def upload_file():
     file = request.files['pdf_file']
     modo_separacao = request.form.get('modo_separacao', 'boleto')
 
-    # ALTERAÇÃO 5: Adiciona logs de INFO para rastrear o início do processamento
     logger.info(f"Requisição recebida. Arquivo: '{file.filename}', Modo: '{modo_separacao}'.")
 
     if file.filename == '':
@@ -345,15 +351,18 @@ def upload_file():
                 logger.error(f"Não foi possível extrair texto do PDF '{file.filename}'.")
                 return "Não foi possível extrair texto do PDF.", 500
 
-            df_todas, df_cov, df_div = processar_pdf(texto_pdf, modo_separacao, emp_fixo)
+            # ALTERAÇÃO 7: Recebe o novo DataFrame de erros
+            df_todas, df_cov, df_div, df_erros = processar_pdf(texto_pdf, modo_separacao, emp_fixo)
             
             if not df_div.empty: df_div = df_div.sort_values(by=['Empreendimento', 'Lote'])
             if not df_cov.empty: df_cov = df_cov.sort_values(by=['Empreendimento', 'Lote'])
             if not df_todas.empty: df_todas = df_todas.sort_values(by=['Empreendimento', 'Lote'])
 
             output = io.BytesIO()
+            # ALTERAÇÃO 8: Adiciona a aba de erros ao Excel
             dfs_to_excel = {
                 "Divergencias": df_div,
+                "Lotes_Com_Erro": df_erros,
                 "Cobertura_Analise": df_cov,
                 "Todas_Parcelas_Extraidas": df_todas
             }
@@ -368,25 +377,29 @@ def upload_file():
             logger.info(f"Relatório salvo com sucesso em '{report_path}'.")
 
             div_html = df_div.to_html(classes='table table-striped table-hover', index=False, border=0) if not df_div.empty else "<p>Nenhuma divergência encontrada.</p>"
-            
+            # ALTERAÇÃO 9: Cria o HTML para a tabela de erros
+            erros_html = df_erros.to_html(classes='table table-danger table-striped table-hover', index=False, border=0) if not df_erros.empty else ""
+
             total_lotes = len(df_cov)
             total_divergencias = len(df_div)
             nao_classificados = len(df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO']) if not df_cov.empty else 0
+            total_erros = len(df_erros) # ALTERAÇÃO 10: Calcula o total de erros
 
-            # ALTERAÇÃO 6: Log com o resumo da análise
-            logger.info(f"Análise de '{file.filename}' concluída. Lotes: {total_lotes}, Divergências: {total_divergencias}, Não Classificados: {nao_classificados}.")
+            logger.info(f"Análise de '{file.filename}' concluída. Lotes: {total_lotes}, Divergências: {total_divergencias}, Não Classificados: {nao_classificados}, Erros: {total_erros}.")
 
+            # ALTERAÇÃO 11: Passa as novas variáveis para o template
             return render_template('results.html',
                                    table=div_html,
                                    total_lotes=total_lotes,
                                    total_divergencias=total_divergencias,
                                    nao_classificados=nao_classificados,
+                                   total_erros=total_erros,
+                                   erros_html=erros_html,
                                    download_url=url_for('download_file', filename=report_filename),
                                    modo_usado=modo_separacao)
         
-        except Exception as e:
-            # ALTERAÇÃO 7: Substitui print() e traceback por uma única chamada a logger.exception()
-            logger.exception(f"Ocorreu um erro inesperado durante o processamento do arquivo '{file.filename}'.")
+        except Exception:
+            logger.exception(f"Ocorreu um erro inesperado e fatal durante o processamento do arquivo '{file.filename}'.")
             return f"Ocorreu um erro inesperado durante o processamento. Verifique os logs do servidor.", 500
     
     logger.warning(f"Tentativa de upload de arquivo com formato inválido: '{file.filename}'.")
@@ -399,6 +412,5 @@ def download_file(filename):
     return send_file(path, as_attachment=True)
 
 if __name__ == '__main__':
-    # Adiciona um log para indicar que a aplicação está iniciando
     logger.info("Iniciando a aplicação Flask em modo de desenvolvimento.")
     app.run(debug=True, host='0.0.0.0', port=8080)
