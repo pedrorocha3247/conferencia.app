@@ -9,7 +9,22 @@ import fitz  # PyMuPDF
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, render_template, request, send_file, url_for
-from openpyxl.styles import NamedStyle, Alignment
+from openpyxl.styles import NamedStyle
+# ALTERAÇÃO 1: Importar o módulo logging e o handler de arquivo
+import logging
+from logging.handlers import RotatingFileHandler
+
+# ALTERAÇÃO 2: Configuração centralizada do logging
+# Configura o logger para salvar mensagens em um arquivo chamado 'app.log'
+# O arquivo terá no máximo 1MB e manterá um backup (rotate).
+handler = RotatingFileHandler('app.log', maxBytes=1000000, backupCount=1)
+# Define o formato da mensagem de log: [Timestamp] NIVEL: Mensagem
+formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+# Cria o logger da aplicação e adiciona o handler configurado
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO) # Define INFO como o nível mínimo para registrar
+logger.addHandler(handler)
 
 # ==== Constantes e Mapeamentos ====
 
@@ -29,15 +44,12 @@ PADRAO_PARCELA_MESMA_LINHA = re.compile(
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
 
-# ALTERAÇÃO 1: Mapear códigos 13, 14, 15 para SBRR I, II e III.
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'TSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
     '13': 'SBRR I', '14': 'SBRR II', '15': 'SBRR III'
 }
 
-# ALTERAÇÃO 2: Criar entradas distintas para SBRR I, II e III no EMP_MAP.
-# Note que os valores são os mesmos, mas as chaves agora são únicas.
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -76,7 +88,8 @@ def extrair_texto_pdf(stream_pdf) -> str:
         doc.close()
         return normalizar_texto(texto)
     except Exception as e:
-        print(f"Erro ao ler o stream do PDF: {e}")
+        # ALTERAÇÃO 3: Substitui print() por logger.exception()
+        logger.exception(f"Erro ao ler o stream do PDF: {e}")
         return ""
 
 def to_float(s: str):
@@ -97,7 +110,6 @@ def fixos_do_emp(emp: str):
 
 def detectar_emp_por_nome_arquivo(path: str):
     nome = os.path.splitext(os.path.basename(path))[0].upper()
-    # ALTERAÇÃO 3: Garantir que "SBRR" genérico seja detectado, além de I, II, III se existirem no nome.
     if "SBRR" in nome:
         return "SBRR"
     for k in EMP_MAP.keys():
@@ -112,7 +124,7 @@ def detectar_emp_por_lote(lote: str):
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
 # ==== Funções de Extração de Dados ====
-
+# (Nenhuma alteração de lógica nesta seção, as funções permanecem as mesmas)
 def limpar_rotulo(lbl: str) -> str:
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
@@ -129,6 +141,7 @@ def fatiar_blocos(texto: str):
     return blocos
 
 def tentar_nome_cliente(bloco: str) -> str:
+    # ... (código da função inalterado)
     linhas = bloco.split('\n')
     if not linhas:
         return "Nome não localizado"
@@ -155,9 +168,7 @@ def tentar_nome_cliente(bloco: str) -> str:
     return "Nome não localizado"
 
 def extrair_parcelas(bloco: str):
-    """
-    Função corrigida para isolar a área de lançamentos e extrair as parcelas de forma mais precisa.
-    """
+    # ... (código da função inalterado)
     itens = OrderedDict()
     
     pos_lancamentos = bloco.find("Lançamentos")
@@ -205,24 +216,23 @@ def extrair_parcelas(bloco: str):
                         itens[lbl] = val
     return itens
 
+
 # ==== Função de Processamento Principal ====
 
 def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
     blocos = fatiar_blocos(texto_pdf)
+    # ALTERAÇÃO 4: Adiciona log com informações do processamento
+    logger.info(f"Encontrados {len(blocos)} lotes para processamento.")
     if not blocos:
+        logger.warning("Nenhum bloco de lote foi encontrado no PDF.")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
     linhas_todas, linhas_cov, linhas_div = [], [], []
     for lote, bloco in blocos:
-        # Lógica de determinação inicial do empreendimento
         emp_atual = emp_fixo if modo_separacao == 'boleto' else detectar_emp_por_lote(lote)
         
-        # ALTERAÇÃO 4: Lógica principal da correção.
-        # Se o empreendimento for o "SBRR" genérico (vindo do nome do arquivo),
-        # tenta reclassificar usando o código do lote, que é mais específico.
         if emp_atual == 'SBRR':
             emp_especifico = detectar_emp_por_lote(lote)
-            # Usa a classificação do lote se ela for uma das específicas de SBRR
             if emp_especifico in ['SBRR I', 'SBRR II', 'SBRR III']:
                 emp_atual = emp_especifico
 
@@ -309,7 +319,12 @@ def upload_file():
     file = request.files['pdf_file']
     modo_separacao = request.form.get('modo_separacao', 'boleto')
 
-    if file.filename == '': return "Nenhum arquivo selecionado.", 400
+    # ALTERAÇÃO 5: Adiciona logs de INFO para rastrear o início do processamento
+    logger.info(f"Requisição recebida. Arquivo: '{file.filename}', Modo: '{modo_separacao}'.")
+
+    if file.filename == '':
+        logger.warning("Tentativa de upload sem arquivo selecionado.")
+        return "Nenhum arquivo selecionado.", 400
 
     if file and file.filename.lower().endswith('.pdf'):
         try:
@@ -317,14 +332,18 @@ def upload_file():
             if modo_separacao == 'boleto':
                 emp_fixo = detectar_emp_por_nome_arquivo(file.filename)
                 if not emp_fixo:
+                    logger.error(f"Empreendimento não identificado no nome do arquivo '{file.filename}' (Modo Boleto).")
                     return f"""<h1>Erro: Empreendimento não identificado (Modo Boleto)</h1>
                            <p>O nome do arquivo <strong>'{file.filename}'</strong> não corresponde a um empreendimento mapeado.</p>
                            <p>Para o modo 'Boleto', o nome do arquivo precisa terminar com um dos códigos (ex: 'Extrato_IATE.pdf').</p>
                            <a href="/">Voltar</a>""", 400
+                logger.info(f"Empreendimento detectado pelo nome do arquivo: '{emp_fixo}'.")
 
             pdf_stream = file.read()
             texto_pdf = extrair_texto_pdf(pdf_stream)
-            if not texto_pdf: return "Não foi possível extrair texto do PDF.", 500
+            if not texto_pdf:
+                logger.error(f"Não foi possível extrair texto do PDF '{file.filename}'.")
+                return "Não foi possível extrair texto do PDF.", 500
 
             df_todas, df_cov, df_div = processar_pdf(texto_pdf, modo_separacao, emp_fixo)
             
@@ -346,12 +365,16 @@ def upload_file():
             report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
             
             with open(report_path, 'wb') as f: f.write(output.getvalue())
+            logger.info(f"Relatório salvo com sucesso em '{report_path}'.")
 
             div_html = df_div.to_html(classes='table table-striped table-hover', index=False, border=0) if not df_div.empty else "<p>Nenhuma divergência encontrada.</p>"
             
             total_lotes = len(df_cov)
             total_divergencias = len(df_div)
             nao_classificados = len(df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO']) if not df_cov.empty else 0
+
+            # ALTERAÇÃO 6: Log com o resumo da análise
+            logger.info(f"Análise de '{file.filename}' concluída. Lotes: {total_lotes}, Divergências: {total_divergencias}, Não Classificados: {nao_classificados}.")
 
             return render_template('results.html',
                                    table=div_html,
@@ -362,17 +385,20 @@ def upload_file():
                                    modo_usado=modo_separacao)
         
         except Exception as e:
-            print(f"Ocorreu um erro no processamento: {e}", file=sys.stderr)
-            import traceback
-            traceback.print_exc()
+            # ALTERAÇÃO 7: Substitui print() e traceback por uma única chamada a logger.exception()
+            logger.exception(f"Ocorreu um erro inesperado durante o processamento do arquivo '{file.filename}'.")
             return f"Ocorreu um erro inesperado durante o processamento. Verifique os logs do servidor.", 500
     
+    logger.warning(f"Tentativa de upload de arquivo com formato inválido: '{file.filename}'.")
     return "Formato de arquivo inválido. Por favor, envie um PDF.", 400
 
 @app.route('/download/<filename>')
 def download_file(filename):
     path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    logger.info(f"Iniciando download do relatório '{filename}'.")
     return send_file(path, as_attachment=True)
 
 if __name__ == '__main__':
+    # Adiciona um log para indicar que a aplicação está iniciando
+    logger.info("Iniciando a aplicação Flask em modo de desenvolvimento.")
     app.run(debug=True, host='0.0.0.0', port=8080)
