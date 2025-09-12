@@ -74,14 +74,7 @@
         </div>
         <div class="card-body">
             <table id="tabela-erros" class="table table-striped" style="width:100%">
-                <thead>
-                    <tr>
-                        <th>Lote</th>
-                        <th>Erro</th>
-                    </tr>
-                </thead>
-                <tbody>
-                </tbody>
+                <!-- O Cabeçalho será gerado pelo JavaScript -->
             </table>
         </div>
     </div>
@@ -95,18 +88,7 @@
         <div class="card-body">
             {% if total_divergencias > 0 %}
                 <table id="tabela-divergencias" class="table table-striped" style="width:100%">
-                    <thead>
-                        <tr>
-                            <th>Empreendimento</th>
-                            <th>Lote</th>
-                            <th>Cliente</th>
-                            <th>Parcela</th>
-                            <th>Valor no Documento</th>
-                            <th>Valor Correto</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                    </tbody>
+                    <!-- O Cabeçalho será gerado pelo JavaScript -->
                 </table>
             {% else %}
                 <p class="text-center p-3">Nenhuma divergência encontrada nos arquivos analisados.</p>
@@ -129,21 +111,22 @@ $(document).ready(function() {
         "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json"
     };
 
+    // Função para capitalizar a primeira letra de cada palavra
+    function toTitleCase(str) {
+        return str.replace(/\w\S*/g, function(txt){
+            return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+        });
+    }
+
     // Inicializa a tabela de divergências se os dados existirem
     const divergenciasData = {{ divergencias_json|safe }};
     if (divergenciasData) {
+        // CORREÇÃO: Mapeia os nomes das colunas para o formato de título
+        const divergenciasColumns = divergenciasData.columns.map(col => ({ title: toTitleCase(col) }));
+
         $('#tabela-divergencias').DataTable({
             data: divergenciasData.data,
-            // ALTERAÇÃO: Usar nomes de colunas em minúsculas para corresponder ao JSON
-            columns: [
-                { data: 'empreendimento' },
-                { data: 'lote' },
-                { data: 'cliente' },
-                { data: 'parcela' },
-                // O Pandas também converte espaços e maiúsculas para snake_case
-                { data: 'valor no documento', render: $.fn.dataTable.render.number('.', ',', 2, 'R$ ') },
-                { data: 'valor correto' }
-            ],
+            columns: divergenciasColumns, // Usa as colunas mapeadas
             language: ptBrLang
         });
     }
@@ -151,13 +134,12 @@ $(document).ready(function() {
     // Inicializa a tabela de erros se os dados existirem
     const errosData = {{ erros_json|safe }};
     if (errosData) {
+        // CORREÇÃO: Mapeia os nomes das colunas para o formato de título
+        const errosColumns = errosData.columns.map(col => ({ title: toTitleCase(col) }));
+
         $('#tabela-erros').DataTable({
             data: errosData.data,
-            // ALTERAÇÃO: Usar nomes de colunas em minúsculas
-            columns: [
-                { data: 'lote' },
-                { data: 'erro' }
-            ],
+            columns: errosColumns, // Usa as colunas mapeadas
             language: ptBrLang
         });
     }
