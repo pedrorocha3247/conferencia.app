@@ -29,12 +29,15 @@ PADRAO_PARCELA_MESMA_LINHA = re.compile(
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
 
+# ALTERAÇÃO 1: Mapear códigos 13, 14, 15 para SBRR I, II e III.
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'TSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
-    '13': 'SBRR', '14': 'SBRR', '15': 'SBRR'
+    '13': 'SBRR I', '14': 'SBRR II', '15': 'SBRR III'
 }
 
+# ALTERAÇÃO 2: Criar entradas distintas para SBRR I, II e III no EMP_MAP.
+# Note que os valores são os mesmos, mas as chaves agora são únicas.
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -44,9 +47,9 @@ EMP_MAP = {
     "RSCIV": {"Melhoramentos": 303.60, "Fundo de Transporte": 9.00},
     "IATE": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
     "MARINA": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
-    "SBRR": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
-    "SBRR": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
-    "SBRR": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRR I": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRR II": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRR III": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "TSCV": {"Melhoramentos": 0.00, "Fundo de Transporte": 9.00},
 }
 
@@ -94,6 +97,9 @@ def fixos_do_emp(emp: str):
 
 def detectar_emp_por_nome_arquivo(path: str):
     nome = os.path.splitext(os.path.basename(path))[0].upper()
+    # ALTERAÇÃO 3: Garantir que "SBRR" genérico seja detectado, além de I, II, III se existirem no nome.
+    if "SBRR" in nome:
+        return "SBRR"
     for k in EMP_MAP.keys():
         if nome.endswith("_" + k) or nome.endswith(k):
             return k
@@ -154,11 +160,9 @@ def extrair_parcelas(bloco: str):
     """
     itens = OrderedDict()
     
-    # Isola o bloco de texto que contém as parcelas, começando após "Lançamentos".
     pos_lancamentos = bloco.find("Lançamentos")
     bloco_de_trabalho = bloco[pos_lancamentos + len("Lançamentos"):] if pos_lancamentos != -1 else bloco
 
-    # Pré-processamento para remover colunas de resumo financeiro que aparecem na mesma linha.
     bloco_limpo_linhas = []
     for linha in bloco_de_trabalho.splitlines():
         match = re.search(r'\s{4,}(DÉBITOS DO MÊS ANTERIOR|ENCARGOS POR ATRASO|PAGAMENTO EFETUADO)', linha)
@@ -168,14 +172,12 @@ def extrair_parcelas(bloco: str):
             bloco_limpo_linhas.append(linha)
     bloco_limpo = "\n".join(bloco_limpo_linhas)
 
-    # Lógica 1: Captura parcelas e valores na mesma linha.
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1))
         val = to_float(m.group(2))
         if lbl and lbl not in itens and val is not None:
             itens[lbl] = val
 
-    # Lógica 2: Captura parcelas cujo valor está na linha seguinte.
     linhas = bloco_limpo.splitlines()
     for i, linha in enumerate(linhas):
         linha_limpa = linha.strip()
@@ -212,7 +214,18 @@ def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
 
     linhas_todas, linhas_cov, linhas_div = [], [], []
     for lote, bloco in blocos:
+        # Lógica de determinação inicial do empreendimento
         emp_atual = emp_fixo if modo_separacao == 'boleto' else detectar_emp_por_lote(lote)
+        
+        # ALTERAÇÃO 4: Lógica principal da correção.
+        # Se o empreendimento for o "SBRR" genérico (vindo do nome do arquivo),
+        # tenta reclassificar usando o código do lote, que é mais específico.
+        if emp_atual == 'SBRR':
+            emp_especifico = detectar_emp_por_lote(lote)
+            # Usa a classificação do lote se ela for uma das específicas de SBRR
+            if emp_especifico in ['SBRR I', 'SBRR II', 'SBRR III']:
+                emp_atual = emp_especifico
+
         cliente = tentar_nome_cliente(bloco)
         itens = extrair_parcelas(bloco)
         
@@ -363,5 +376,3 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
-
-
