@@ -189,3 +189,4 @@ def setup_database(app):
 if __name__ == '__main__':
     setup_database(app)
     app.run(debug=True)
+
