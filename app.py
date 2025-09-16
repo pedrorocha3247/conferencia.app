@@ -48,7 +48,7 @@ EMP_MAP = {
     "SBRRI": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "SBRRII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
-    "TSCV": {"Melhoramentos": 0.00, "Fundo de Transporte": 9.00},
+    "RSCV": {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00},
 }
 
 BASE_FIXOS = {
@@ -431,3 +431,4 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
