@@ -8,6 +8,9 @@
     <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
     
     <style>
+        body {
+            background-color: #222;
+        }
         .container {
             max-width: 700px;
             margin-top: 50px;
@@ -22,14 +25,27 @@
             line-height: 1.2;
             display: block;
         }
-        .nav-pills .nav-link {
-            font-weight: bold;
-        }
         .tab-content {
             border: 1px solid #4e5d6c;
             border-top: none;
             padding: 2rem;
             border-radius: 0 0 .375rem .375rem;
+            background-color: #2a3137;
+        }
+
+        /* <<NOVA ALTERAÇÃO>>: Estilos para realçar as abas */
+        .nav-pills .nav-link {
+            font-weight: bold;
+            background-color: #37404a; /* Cor de fundo para a aba inativa */
+            color: #adb5bd; /* Cor do texto para a aba inativa */
+            border: 1px solid transparent;
+        }
+        .nav-pills .nav-link.active {
+            background-color: #2b90d9; /* Cor azul primária do tema para a aba ativa */
+            color: #fff;
+        }
+        .nav-pills {
+            --bs-nav-pills-border-radius: .375rem .375rem 0 0;
         }
     </style>
 </head>
@@ -115,7 +131,7 @@
                     </div>
 
                     <div class="d-grid mt-4">
-                        <button id="compare-button" type="submit" class="btn btn-info btn-lg">
+                        <button id="compare-button" type="submit" class="btn btn-primary btn-lg">
                             <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                             <span class="button-text">Comparar Arquivos</span>
                         </button>
