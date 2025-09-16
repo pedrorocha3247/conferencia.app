@@ -14,10 +14,6 @@
         .accordion-button:not(.collapsed) { background-color: #4e5d6c; }
         .header-logo { max-height: 50px; width: auto; }
         .card { border: none; }
-        /* Ajustes para DataTables no tema escuro */
-        .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_processing, .dataTables_wrapper .dataTables_paginate {
-            color: #dee2e6;
-        }
         .dataTables_wrapper .form-control {
             background-color: #4e5d6c;
             color: #fff;
@@ -59,20 +55,30 @@
                 </div>
                 <hr>
                 <a href="{{ download_url }}" class="btn btn-success">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-excel-fill" viewBox="0 0 16 16">
-                        <path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0M9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1M5.884 6.884 8 9.219l2.116-2.54a.5.5 0 1 1 .768.641L8.651 10l2.233 2.68a.5.5 0 0 1-.768.64L8 10.781l-2.116 2.54a.5.5 0 0 1-.768-.641L7.349 10 5.116 7.32a.5.5 0 1 1 .768-.641z"/>
-                    </svg>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-excel-fill" viewBox="0 0 16 16"><path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0M9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1M5.884 6.884 8 9.219l2.116-2.54a.5.5 0 1 1 .768.641L8.651 10l2.233 2.68a.5.5 0 0 1-.768.64L8 10.781l-2.116 2.54a.5.5 0 0 1-.768-.641L7.349 10 5.116 7.32a.5.5 0 1 1 .768-.641z"/></svg>
                     Baixar Relatório Comparativo Completo (.xlsx)
                 </a>
             </div>
         </div>
         
+        <div class="card mb-3">
+          <div class="card-body">
+              <div style="max-width: 300px;">
+                <label for="empreendimentoFilter" class="form-label fw-bold">Filtrar por Empreendimento:</label>
+                <select class="form-select form-select-sm" id="empreendimentoFilter">
+                    <option value="">-- Mostrar Todos --</option>
+                    {% for emp in empreendimentos %}
+                        <option value="{{ emp }}">{{ emp }}</option>
+                    {% endfor %}
+                </select>
+              </div>
+          </div>
+        </div>
+
         <div class="accordion" id="accordionResults">
             <div class="accordion-item">
                 <h2 class="accordion-header">
-                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDivergencias" aria-expanded="true" aria-controls="collapseDivergencias">
-                        Divergências de Valor ({{ resumo['Parcelas com Valor Alterado'] }} encontradas)
-                    </button>
+                    <button class="accordion-button" type="button" data-bs-toggle="collapse" data-bs-target="#collapseDivergencias">Divergências de Valor ({{ resumo['Parcelas com Valor Alterado'] }} encontradas)</button>
                 </h2>
                 <div id="collapseDivergencias" class="accordion-collapse collapse show" data-bs-parent="#accordionResults">
                     <div class="accordion-body">
@@ -82,9 +88,7 @@
             </div>
             <div class="accordion-item">
                 <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdicionados" aria-expanded="false" aria-controls="collapseAdicionados">
-                        Lotes Adicionados ({{ resumo['Lotes Adicionados'] }} encontrados)
-                    </button>
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseAdicionados">Lotes Adicionados ({{ resumo['Lotes Adicionados'] }} encontrados)</button>
                 </h2>
                 <div id="collapseAdicionados" class="accordion-collapse collapse" data-bs-parent="#accordionResults">
                     <div class="accordion-body">
@@ -94,9 +98,7 @@
             </div>
             <div class="accordion-item">
                 <h2 class="accordion-header">
-                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRemovidos" aria-expanded="false" aria-controls="collapseRemovidos">
-                        Lotes Removidos ({{ resumo['Lotes Removidos'] }} encontrados)
-                    </button>
+                    <button class="accordion-button collapsed" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRemovidos">Lotes Removidos ({{ resumo['Lotes Removidos'] }} encontrados)</button>
                 </h2>
                 <div id="collapseRemovidos" class="accordion-collapse collapse" data-bs-parent="#accordionResults">
                     <div class="accordion-body">
@@ -121,8 +123,8 @@
                 const columns = jsonData.columns.map(col => ({ 
                     title: col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) 
                 }));
-
-                $('#' + tableId).DataTable({
+                // Retorna a instância da tabela para uso posterior
+                return $('#' + tableId).DataTable({
                     data: jsonData.data,
                     columns: columns,
                     language: ptBrLang,
@@ -130,12 +132,21 @@
                 });
             } else {
                 $('#' + tableId).parent().html('<p class="text-center p-3">Nenhum dado encontrado.</p>');
+                return null;
             }
         }
 
-        initDataTable('tabela-divergencias', {{ divergencias_json|safe }});
-        initDataTable('tabela-adicionados', {{ adicionados_json|safe }});
-        initDataTable('tabela-removidos', {{ removidos_json|safe }});
+        const tableDivergencias = initDataTable('tabela-divergencias', {{ divergencias_json|safe }});
+        const tableAdicionados = initDataTable('tabela-adicionados', {{ adicionados_json|safe }});
+        const tableRemovidos = initDataTable('tabela-removidos', {{ removidos_json|safe }});
+
+        // NOVO: Adiciona o listener para o filtro que atua em todas as tabelas
+        $('#empreendimentoFilter').on('change', function() {
+            const searchValue = this.value;
+            if (tableDivergencias) { tableDivergencias.column(0).search(searchValue).draw(); }
+            if (tableAdicionados) { tableAdicionados.column(0).search(searchValue).draw(); }
+            if (tableRemovidos) { tableRemovidos.column(0).search(searchValue).draw(); }
+        });
     });
     </script>
 </body>
