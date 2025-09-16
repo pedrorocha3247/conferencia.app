@@ -70,50 +70,77 @@
         <p id="progress-message" class="text-center text-muted mt-2"></p>
     </div>
 
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
     <script>
-        // ... função setupFormSubmitSpinner agora controla o progresso ...
+        // Função para ativar o spinner nos botões de formulário
         function setupFormSubmitSpinner(formId, buttonId) {
-            document.getElementById(formId).addEventListener('submit', function() {
-                const button = document.getElementById(buttonId);
-                const progressBarContainer = document.querySelector('.progress-bar-container');
-                const progressBar = document.getElementById('progress-bar');
-                const progressMessage = document.getElementById('progress-message');
-                
-                button.disabled = true;
-                progressBarContainer.style.display = 'block';
+            const form = document.getElementById(formId);
+            if (form) {
+                form.addEventListener('submit', function() {
+                    const button = document.getElementById(buttonId);
+                    const progressBarContainer = document.querySelector('.progress-bar-container');
+                    
+                    if (button) button.disabled = true;
+                    if (progressBarContainer) progressBarContainer.style.display = 'block';
 
-                const messages = ["Analisando arquivos...", "Extraindo texto...", "Cruzando informações...", "Quase pronto..."];
-                let msgIndex = 0;
-                let progress = 0;
+                    // Lógica da barra de progresso (igual à anterior)
+                    const progressBar = document.getElementById('progress-bar');
+                    const progressMessage = document.getElementById('progress-message');
+                    const messages = ["Analisando arquivos...", "Extraindo texto...", "Cruzando informações...", "Quase pronto..."];
+                    let msgIndex = 0;
+                    let progress = 0;
 
-                progressMessage.textContent = messages[0];
-                progressBar.style.width = '10%';
+                    progressMessage.textContent = messages[0];
+                    progressBar.style.width = '10%';
 
-                const interval = setInterval(() => {
-                    msgIndex = (msgIndex + 1) % messages.length;
-                    progress = Math.min(progress + 25, 90); // Simula o progresso sem chegar a 100%
-                    progressMessage.textContent = messages[msgIndex];
-                    progressBar.style.width = progress + '%';
-                }, 2500); // Muda a mensagem a cada 2.5s
-            });
+                    const interval = setInterval(() => {
+                        msgIndex = (msgIndex + 1) % messages.length;
+                        progress = Math.min(progress + 25, 90);
+                        progressMessage.textContent = messages[msgIndex];
+                        progressBar.style.width = progress + '%';
+                    }, 2500);
+                });
+            }
         }
-        setupFormSubmitSpinner('upload-form', 'submit-button');
-        setupFormSubmitSpinner('compare-form', 'compare-button');
-        setupFormSubmitSpinner('batch-form', 'batch-button');
 
-        // NOVO: Script para exibir alertas de erro
-        window.addEventListener('load', () => {
+        // Aguarda a página carregar completamente para executar tudo
+        window.addEventListener('load', function() {
+            // --- 1. Lógica dos Alertas de Erro ---
             const params = new URLSearchParams(window.location.search);
             const error = params.get('error');
             if (error) {
                 const alertPlaceholder = document.getElementById('alert-placeholder');
-                alertPlaceholder.innerHTML = `
-                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                        <strong>Erro:</strong> ${error}
-                        <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                    </div>`;
+                if (alertPlaceholder) {
+                    alertPlaceholder.innerHTML = `
+                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                            <strong>Erro:</strong> ${error}
+                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                        </div>`;
+                }
+            }
+
+            // --- 2. Lógica da Tela de Splash ---
+            const splashScreen = document.getElementById('splash-screen');
+            const mainContent = document.getElementById('main-content');
+            const splashDuration = 2500; // 2.5 segundos
+
+            if (splashScreen && mainContent) {
+                setTimeout(() => {
+                    splashScreen.style.opacity = '0';
+                    setTimeout(() => {
+                        splashScreen.style.display = 'none';
+                        mainContent.style.display = 'block'; // Torna o conteúdo principal visível
+                    }, 800); // Tempo para a animação de fade-out
+                }, splashDuration);
             }
         });
+
+        // Associa a função do spinner a cada formulário
+        setupFormSubmitSpinner('upload-form', 'submit-button');
+        setupFormSubmitSpinner('compare-form', 'compare-button');
+        setupFormSubmitSpinner('batch-form', 'batch-button');
     </script>
 </body>
 </html>
+
