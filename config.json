@@ -1,0 +1,23 @@
+{
+  "EMP_MAP": {
+    "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
+    "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
+    "RSCI": {"Melhoramentos": 250.42, "Fundo de Transporte": 9.00},
+    "RSCII": {"Melhoramentos": 240.29, "Fundo de Transporte": 9.00},
+    "RSCIII": {"Melhoramentos": 281.44, "Fundo de Transporte": 9.00},
+    "RSCIV": {"Melhoramentos": 303.60, "Fundo de Transporte": 9.00},
+    "IATE": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
+    "MARINA": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
+    "SBRRI": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRRII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "TSCV": {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00}
+  },
+  "BASE_FIXOS": {
+    "Taxa de Conservação": [434.11],
+    "Contrib. Social SLIM": [103.00, 309.00],
+    "Contribuição ABRASMA - Bronze": [20.00],
+    "Contribuição ABRASMA - Prata": [40.00],
+    "Contribuição ABRASMA - Ouro": [60.00]
+  }
+}
