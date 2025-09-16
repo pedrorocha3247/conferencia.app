@@ -98,7 +98,15 @@ def init_db_command():
     setup_database()
     print("Banco de dados inicializado com sucesso.")
 
+# Este código cria a "porta" /healthz
+@app.route('/healthz')
+def healthz():
+    # Quando o Render acessar essa porta, a aplicação simplesmente responderá "OK"
+    # O número 200 é o código de status para "Sucesso" na web.
+    return "OK", 200
+
 if __name__ == '__main__':
     with app.app_context():
         setup_database() # Mantido para facilidade de desenvolvimento local
     app.run(debug=True)
+
