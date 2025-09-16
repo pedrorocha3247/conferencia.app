@@ -5,15 +5,24 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Resultados do Comparativo</title>
     <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+    
     <style>
-        .table-container { max-height: 45vh; overflow-y: auto; margin-top: 1rem; }
-        .table thead th { position: sticky; top: -1px; background-color: #2a3137; z-index: 10; }
         .summary-card { background-color: #37404a; }
         .summary-item strong { display: block; font-size: 0.9rem; color: #adb5bd; text-transform: uppercase;}
         .summary-item span { font-size: 1.8rem; font-weight: bold; }
         .accordion-button:not(.collapsed) { background-color: #4e5d6c; }
         .header-logo { max-height: 50px; width: auto; }
         .card { border: none; }
+        /* Ajustes para DataTables no tema escuro */
+        .dataTables_wrapper .dataTables_length, .dataTables_wrapper .dataTables_filter, .dataTables_wrapper .dataTables_info, .dataTables_wrapper .dataTables_processing, .dataTables_wrapper .dataTables_paginate {
+            color: #dee2e6;
+        }
+        .dataTables_wrapper .form-control {
+            background-color: #4e5d6c;
+            color: #fff;
+            border-color: #6c757d;
+        }
     </style>
 </head>
 <body>
@@ -66,8 +75,8 @@
                     </button>
                 </h2>
                 <div id="collapseDivergencias" class="accordion-collapse collapse show" data-bs-parent="#accordionResults">
-                    <div class="accordion-body p-0">
-                        <div class="table-container">{{ divergencias|safe }}</div>
+                    <div class="accordion-body">
+                        <table id="tabela-divergencias" class="table table-striped" style="width:100%"></table>
                     </div>
                 </div>
             </div>
@@ -78,8 +87,8 @@
                     </button>
                 </h2>
                 <div id="collapseAdicionados" class="accordion-collapse collapse" data-bs-parent="#accordionResults">
-                    <div class="accordion-body p-0">
-                        <div class="table-container">{{ adicionados|safe }}</div>
+                    <div class="accordion-body">
+                        <table id="tabela-adicionados" class="table table-striped" style="width:100%"></table>
                     </div>
                 </div>
             </div>
@@ -90,14 +99,44 @@
                     </button>
                 </h2>
                 <div id="collapseRemovidos" class="accordion-collapse collapse" data-bs-parent="#accordionResults">
-                    <div class="accordion-body p-0">
-                        <div class="table-container">{{ removidos|safe }}</div>
+                    <div class="accordion-body">
+                        <table id="tabela-removidos" class="table table-striped" style="width:100%"></table>
                     </div>
                 </div>
             </div>
         </div>
-
     </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+    <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+
+    <script>
+    $(document).ready(function() {
+        const ptBrLang = { "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json" };
+
+        function initDataTable(tableId, jsonData) {
+            if (jsonData && jsonData.data.length > 0) {
+                const columns = jsonData.columns.map(col => ({ 
+                    title: col.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()) 
+                }));
+
+                $('#' + tableId).DataTable({
+                    data: jsonData.data,
+                    columns: columns,
+                    language: ptBrLang,
+                    responsive: true
+                });
+            } else {
+                $('#' + tableId).parent().html('<p class="text-center p-3">Nenhum dado encontrado.</p>');
+            }
+        }
+
+        initDataTable('tabela-divergencias', {{ divergencias_json|safe }});
+        initDataTable('tabela-adicionados', {{ adicionados_json|safe }});
+        initDataTable('tabela-removidos', {{ removidos_json|safe }});
+    });
+    </script>
 </body>
 </html>
