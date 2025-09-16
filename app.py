@@ -5,32 +5,15 @@ import sys
 import re
 import unicodedata
 import io
-import fitz  # PyMuPDf
+import fitz  # PyMuPDF
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, render_template, request, send_file, url_for
 from openpyxl.styles import NamedStyle
 import traceback
-import json # <--- Adicionada importação para JSON
 
-# ==== Carregamento das Configurações a partir do arquivo config.json ====
-try:
-    with open('config.json', 'r', encoding='utf-8') as f:
-        config = json.load()
-    EMP_MAP = config.get('EMP_MAP', {})
-    BASE_FIXOS = config.get('BASE_FIXOS', {})
-    print("Arquivo de configuração 'config.json' carregado com sucesso.")
-except FileNotFoundError:
-    print("AVISO: O arquivo 'config.json' não foi encontrado. Usando valores padrão vazios.")
-    EMP_MAP = {}
-    BASE_FIXOS = {}
-except json.JSONDecodeError:
-    print("ERRO: O arquivo 'config.json' contém um erro de formatação. Usando valores padrão vazios.")
-    EMP_MAP = {}
-    BASE_FIXOS = {}
+# ==== Constantes e Mapeamentos ====
 
-
-# ==== Constantes ====
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
 HEADERS = (
     "Remessa para Conferência", "Página", "Banco", "IMOBILIARIOS", "Débitos do Mês",
@@ -53,10 +36,28 @@ CODIGO_EMP_MAP = {
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
 
-#
-# ... (O restante do seu app.py continua aqui, exatamente como na versão estável anterior)
-# (Ou seja, todas as funções de `normalizar_texto` até o final do arquivo)
-#
+EMP_MAP = {
+    "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
+    "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
+    "RSCI": {"Melhoramentos": 250.42, "Fundo de Transporte": 9.00},
+    "RSCII": {"Melhoramentos": 240.29, "Fundo de Transporte": 9.00},
+    "RSCIII": {"Melhoramentos": 281.44, "Fundo de Transporte": 9.00},
+    "RSCIV": {"Melhoramentos": 303.60, "Fundo de Transporte": 9.00},
+    "IATE": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
+    "MARINA": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
+    "SBRRI": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRRII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "RSCV": {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00},
+}
+
+BASE_FIXOS = {
+    "Taxa de Conservação": [434.11],
+    "Contrib. Social SLIM": [103.00, 309.00],
+    "Contribuição ABRASMA - Bronze": [20.00],
+    "Contribuição ABRASMA - Prata": [40.00],
+    "Contribuição ABRASMA - Ouro": [60.00],
+}
 
 # ==== Funções de Normalização e Extração ====
 
@@ -430,4 +431,3 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
-
