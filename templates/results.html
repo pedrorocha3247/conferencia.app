@@ -1,161 +1,20 @@
-<!DOCTYPE html>
-<html lang="pt-BR" data-bs-theme="dark"> <!-- Atributo para temas escuros -->
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Resultados da Validação</title>
-
-<!-- Link para o CSS do tema Cyborg -->
-<link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
-
-<!-- CSS do DataTables para Bootstrap 5 -->
-<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
-
-<style>
-  /* Pequenos ajustes visuais */
-  body { 
-    padding-bottom: 50px;
-  }
-
-  /* ALTERAÇÃO 1: Remove as bordas finas dos cards no tema Cyborg */
-  .card {
-      border: none;
-  }
-
-  .card-header {
-      font-weight: bold;
-  }
-  
-  /* ALTERAÇÃO 2: Estilo para o logótipo no cabeçalho */
-  .header-logo {
-      max-height: 50px; /* Ajuste a altura conforme necessário */
-      width: auto;
-  }
-</style>
-</head>
-<body>
-<div class="container-fluid mt-4 px-4">
-    <!-- ALTERAÇÃO 3: Cabeçalho modificado para ter o logótipo no lugar do título -->
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logótipo da Empresa" class="header-logo">
-        <a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
-    </div>
-
-    <!-- Quadro de Resumo -->
-    <div class="card border-primary mb-4">
-        <div class="card-body summary-card">
-            <h5 class="card-title mb-3">Resumo da Análise</h5>
-            <div class="row text-center">
-                <div class="col-md-3 summary-item border-end border-secondary">
-                    <strong class="text-uppercase">Modo de Análise</strong>
-                    <div><span class="badge bg-primary fs-6 mt-1">{{ modo_usado.replace('_', '/').title() }}</span></div>
-                </div>
-                <div class="col-md-3 summary-item border-end border-secondary">
-                    <strong class="text-uppercase">Total de Lotes Processados</strong>
-                    <div><span class="badge bg-secondary fs-6 mt-1">{{ total_lotes }}</span></div>
-                </div>
-                <div class="col-md-3 summary-item border-end border-secondary">
-                    <strong class="text-uppercase">Total de Divergências</strong>
-                    <div><span class="badge bg-danger fs-6 mt-1">{{ total_divergencias }}</span></div>
-                </div>
-                <div class="col-md-3 summary-item {% if nao_classificados > 0 %}border-end border-secondary{% endif %}">
-                    <strong class="text-uppercase">Lotes com Erro</strong>
-                    <div><span class="badge {% if total_erros > 0 %}bg-light text-dark{% else %}bg-secondary{% endif %} fs-6 mt-1">{{ total_erros }}</span></div>
-                </div>
-
-                {% if nao_classificados > 0 %}
-                <div class="col-md-3 summary-item">
-                    <strong class="text-uppercase">Lotes Não Classificados</strong>
-                    <div><span class="badge bg-warning fs-6 mt-1">{{ nao_classificados }}</span></div>
-                </div>
-                {% endif %}
-            </div>
-            <hr>
-            <a href="{{ download_url }}" class="btn btn-success">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-excel-fill" viewBox="0 0 16 16">
-                    <path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0M9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1M5.884 6.884 8 9.219l2.116-2.54a.5.5 0 1 1 .768.641L8.651 10l2.233 2.68a.5.5 0 0 1-.768.64L8 10.781l-2.116 2.54a.5.5 0 0 1-.768-.641L7.349 10 5.116 7.32a.5.5 0 1 1 .768-.641z"/>
-                </svg>
-                Baixar Relatório Completo (.xlsx)
-            </a>
-        </div>
-    </div>
-    
-    <!-- Tabela de Lotes com Erro -->
-    {% if total_erros > 0 %}
-    <div class="card border-light mb-4">
-        <div class="card-header bg-light text-dark">
-            <h4>Tabela de Lotes com Erro no Processamento</h4>
-        </div>
-        <div class="card-body">
-            <table id="tabela-erros" class="table table-striped" style="width:100%">
-                <!-- O Cabeçalho será gerado pelo JavaScript -->
-            </table>
-        </div>
-    </div>
-    {% endif %}
-
-    <!-- Tabela de Divergências -->
-    <div class="card border-info">
-        <div class="card-header">
-            <h4>Tabela de Divergências</h4>
-        </div>
-        <div class="card-body">
-            {% if total_divergencias > 0 %}
-                <table id="tabela-divergencias" class="table table-striped" style="width:100%">
-                    <!-- O Cabeçalho será gerado pelo JavaScript -->
-                </table>
-            {% else %}
-                <p class="text-center p-3">Nenhuma divergência encontrada nos arquivos analisados.</p>
-            {% endif %}
-        </div>
-    </div>
+<div class="mb-3 w-25">
+    <label for="empreendimentoFilter" class="form-label">Filtrar por Empreendimento:</label>
+    <select class="form-select" id="empreendimentoFilter">
+        <option value="">Todos</option>
+        {% for emp in empreendimentos %}
+            <option value="{{ emp }}">{{ emp }}</option>
+        {% endfor %}
+    </select>
 </div>
-
-<!-- Scripts Essenciais (jQuery e Bootstrap) -->
-<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
-<!-- Scripts do DataTables -->
-<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
-<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 
 <script>
 $(document).ready(function() {
-    
-    const ptBrLang = {
-        "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json"
-    };
+    const table = $('#tabela-divergencias').DataTable({ /* ... opções ... */ });
 
-    function toTitleCase(str) {
-        return str.replace(/\w\S*/g, function(txt){
-            return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-        });
-    }
-
-    const divergenciasData = {{ divergencias_json|safe }};
-    if (divergenciasData) {
-        const divergenciasColumns = divergenciasData.columns.map(col => ({ title: toTitleCase(col) }));
-
-        $('#tabela-divergencias').DataTable({
-            data: divergenciasData.data,
-            columns: divergenciasColumns,
-            language: ptBrLang
-        });
-    }
-
-    const errosData = {{ erros_json|safe }};
-    if (errosData) {
-        const errosColumns = errosData.columns.map(col => ({ title: toTitleCase(col) }));
-
-        $('#tabela-erros').DataTable({
-            data: errosData.data,
-            columns: errosColumns,
-            language: ptBrLang
-        });
-    }
+    $('#empreendimentoFilter').on('change', function() {
+        // Coluna 0 é a de Empreendimento
+        table.column(0).search(this.value).draw();
+    });
 });
 </script>
-
-</body>
-</html>
-
-
