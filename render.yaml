@@ -6,5 +6,9 @@ services:
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
-    healthCheckPath: /healthz
+      - key: SECRET_KEY # Adicione uma chave secreta para segurança
+        generateValue: true
+    healthCheckPath: /healthz # Você precisará criar uma rota simples para isso no app.py
     autoDeploy: true
+    # NOVO: Comando para rodar antes de iniciar o servidor
+    preDeployCommand: "pip install -r requirements.txt && flask init-db"
