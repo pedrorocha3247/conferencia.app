@@ -5,7 +5,7 @@ import sys
 import re
 import unicodedata
 import io
-import fitz  # PyMuPDF
+import fitz  # PyMuPDf
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, render_template, request, send_file, url_for
@@ -430,3 +430,4 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
