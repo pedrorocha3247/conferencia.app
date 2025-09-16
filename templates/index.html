@@ -84,7 +84,7 @@
                     if (button) button.disabled = true;
                     if (progressBarContainer) progressBarContainer.style.display = 'block';
 
-                    // Lógica da barra de progresso (igual à anterior)
+                    // Lógica da barra de progresso
                     const progressBar = document.getElementById('progress-bar');
                     const progressMessage = document.getElementById('progress-message');
                     const messages = ["Analisando arquivos...", "Extraindo texto...", "Cruzando informações...", "Quase pronto..."];
@@ -104,42 +104,55 @@
             }
         }
 
-        // Aguarda a página carregar completamente para executar tudo
-        window.addEventListener('load', function() {
+        // ALTERAÇÃO: Trocado 'load' por 'DOMContentLoaded' para maior robustez
+        document.addEventListener('DOMContentLoaded', function() {
+            console.log("Página carregada, iniciando script...");
+
             // --- 1. Lógica dos Alertas de Erro ---
-            const params = new URLSearchParams(window.location.search);
-            const error = params.get('error');
-            if (error) {
-                const alertPlaceholder = document.getElementById('alert-placeholder');
-                if (alertPlaceholder) {
-                    alertPlaceholder.innerHTML = `
-                        <div class="alert alert-danger alert-dismissible fade show" role="alert">
-                            <strong>Erro:</strong> ${error}
-                            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
-                        </div>`;
+            try {
+                const params = new URLSearchParams(window.location.search);
+                const error = params.get('error');
+                if (error) {
+                    const alertPlaceholder = document.getElementById('alert-placeholder');
+                    if (alertPlaceholder) {
+                        alertPlaceholder.innerHTML = `
+                            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                                <strong>Erro:</strong> ${error}
+                                <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+                            </div>`;
+                    }
                 }
+            } catch (e) {
+                console.error("Erro ao processar alertas:", e);
             }
 
             // --- 2. Lógica da Tela de Splash ---
             const splashScreen = document.getElementById('splash-screen');
             const mainContent = document.getElementById('main-content');
-            const splashDuration = 2500; // 2.5 segundos
+            const splashDuration = 2500;
+
+            console.log("Elemento Splash:", splashScreen);
+            console.log("Elemento Conteúdo Principal:", mainContent);
 
             if (splashScreen && mainContent) {
+                console.log("Iniciando temporizador para a tela de splash...");
                 setTimeout(() => {
                     splashScreen.style.opacity = '0';
                     setTimeout(() => {
                         splashScreen.style.display = 'none';
-                        mainContent.style.display = 'block'; // Torna o conteúdo principal visível
-                    }, 800); // Tempo para a animação de fade-out
+                        mainContent.style.display = 'block';
+                        console.log("Conteúdo principal exibido.");
+                    }, 800);
                 }, splashDuration);
+            } else {
+                console.error("Erro: Não foi possível encontrar os elementos da splash screen ou do conteúdo principal.");
             }
+            
+            // --- 3. Associa a função do spinner a cada formulário ---
+            setupFormSubmitSpinner('upload-form', 'submit-button');
+            setupFormSubmitSpinner('compare-form', 'compare-button');
+            setupFormSubmitSpinner('batch-form', 'batch-button');
         });
-
-        // Associa a função do spinner a cada formulário
-        setupFormSubmitSpinner('upload-form', 'submit-button');
-        setupFormSubmitSpinner('compare-form', 'compare-button');
-        setupFormSubmitSpinner('batch-form', 'batch-button');
     </script>
 </body>
 </html>
