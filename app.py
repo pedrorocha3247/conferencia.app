@@ -9,21 +9,10 @@ import fitz  # PyMuPDF
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, render_template, request, send_file, url_for
-from openpyxl.styles import NamedStyle
-import logging
+from openpyxl.styles import NamedStyle, Alignment
 
-# Configuração do Log (inalterada)
-handler = logging.StreamHandler(sys.stdout)
-formatter = logging.Formatter('%(asctime)s - %(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-logger.handlers.clear()
-logger.addHandler(handler)
+# ==== Constantes e Mapeamentos ====
 
-
-# ==== Constantes e Mapeamentos (inalterados) ====
-# ... (código existente)
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
 HEADERS = (
     "Remessa para Conferência", "Página", "Banco", "IMOBILIARIOS", "Débitos do Mês",
@@ -43,7 +32,7 @@ PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'TSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
-    '13': 'SBRR I', '14': 'SBRR II', '15': 'SBRR III'
+    '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
 
 EMP_MAP = {
@@ -55,9 +44,9 @@ EMP_MAP = {
     "RSCIV": {"Melhoramentos": 303.60, "Fundo de Transporte": 9.00},
     "IATE": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
     "MARINA": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
-    "SBRR I": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
-    "SBRR II": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
-    "SBRR III": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRRI": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRRII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "TSCV": {"Melhoramentos": 0.00, "Fundo de Transporte": 9.00},
 }
 
@@ -69,9 +58,8 @@ BASE_FIXOS = {
     "Contribuição ABRASMA - Ouro": [60.00],
 }
 
+# ==== Funções de Normalização e Extração ====
 
-# ==== Funções (inalteradas) ====
-# ... (todo o resto do código de funções permanece o mesmo)
 def normalizar_texto(s: str) -> str:
     s = s.translate(DASHES).replace("\u00A0", " ")
     s = "".join(ch for ch in s if ch not in "\u200B\u200C\u200D\uFEFF")
@@ -84,8 +72,8 @@ def extrair_texto_pdf(stream_pdf) -> str:
         texto = "\n".join(p.get_text("text", sort=True) for p in doc)
         doc.close()
         return normalizar_texto(texto)
-    except Exception:
-        logger.exception("Erro ao ler o stream do PDF.")
+    except Exception as e:
+        print(f"Erro ao ler o stream do PDF: {e}")
         return ""
 
 def to_float(s: str):
@@ -93,6 +81,8 @@ def to_float(s: str):
         return float(s.replace(".", "").replace(",", ".").strip())
     except (ValueError, TypeError):
         return None
+
+# ==== Funções de Lógica e Classificação ====
 
 def fixos_do_emp(emp: str):
     if emp not in EMP_MAP:
@@ -104,11 +94,12 @@ def fixos_do_emp(emp: str):
 
 def detectar_emp_por_nome_arquivo(path: str):
     nome = os.path.splitext(os.path.basename(path))[0].upper()
-    if "SBRR" in nome:
-        return "SBRR"
     for k in EMP_MAP.keys():
         if nome.endswith("_" + k) or nome.endswith(k):
             return k
+    # Adicionado para SBRR genérico
+    if "SBRR" in nome:
+        return "SBRR" # Retorna chave genérica para ser tratada depois
     return None
 
 def detectar_emp_por_lote(lote: str):
@@ -117,12 +108,15 @@ def detectar_emp_por_lote(lote: str):
     prefixo = lote.split('.')[0]
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
+# ==== Funções de Extração de Dados ====
+
 def limpar_rotulo(lbl: str) -> str:
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
     return lbl
 
 def fatiar_blocos(texto: str):
+    # Garante que cada lote comece em uma nova linha
     texto_processado = PADRAO_LOTE.sub(r"\n\1", texto)
     ms = list(PADRAO_LOTE.finditer(texto_processado))
     blocos = []
@@ -136,26 +130,25 @@ def tentar_nome_cliente(bloco: str) -> str:
     linhas = bloco.split('\n')
     if not linhas:
         return "Nome não localizado"
+    
+    # Procura pelo nome nas primeiras 5 linhas ao redor do lote
+    linhas_para_buscar = [linhas[0]] + linhas[1:5]
+    for linha in linhas_para_buscar:
+        # Remove o lote se estiver na linha
+        linha_sem_lote = PADRAO_LOTE.sub('', linha).strip()
+        if not linha_sem_lote: continue
 
-    primeira_linha = linhas[0].strip()
-    match_lote = PADRAO_LOTE.match(primeira_linha)
-    if match_lote:
-        nome_candidato = primeira_linha[match_lote.end():].strip()
-        if len(nome_candidato) > 4 and ' ' in nome_candidato and not any(h.upper() in nome_candidato.upper() for h in HEADERS):
-            return nome_candidato
-
-    for linha in linhas[1:5]:
-        linha_limpa = linha.strip()
+        # Verifica se a linha parece um nome
         is_valid_name = (
-            len(linha_limpa) > 5 and ' ' in linha_limpa and
-            sum(c.isalpha() for c in linha_limpa) / len(linha_limpa.replace(" ", "")) > 0.8 and
-            not any(h.upper() in linha_limpa.upper() for h in HEADERS) and
-            not PADRAO_LOTE.match(linha_limpa) and
-            not re.search(r'\d{2}/\d{2}/\d{4}', linha_limpa) and
-            not linha_limpa.upper().startswith("TOTAL")
+            len(linha_sem_lote) > 5 and ' ' in linha_sem_lote and
+            sum(c.isalpha() for c in linha_sem_lote.replace(" ", "")) / len(linha_sem_lote.replace(" ", "")) > 0.7 and
+            not any(h.upper() in linha_sem_lote.upper() for h in HEADERS) and
+            not re.search(r'\d{2}/\d{2}/\d{4}', linha_sem_lote) and
+            not linha_sem_lote.upper().startswith(("TOTAL", "BANCO", "03-"))
         )
         if is_valid_name:
-            return linha_limpa
+            return linha_sem_lote
+            
     return "Nome não localizado"
 
 
@@ -163,21 +156,20 @@ def extrair_parcelas(bloco: str):
     itens = OrderedDict()
     
     pos_lancamentos = bloco.find("Lançamentos")
-    bloco_de_trabalho = bloco[pos_lancamentos + len("Lançamentos"):] if pos_lancamentos != -1 else bloco
+    bloco_de_trabalho = bloco[pos_lancamentos:] if pos_lancamentos != -1 else bloco
 
     bloco_limpo_linhas = []
     for linha in bloco_de_trabalho.splitlines():
         match = re.search(r'\s{4,}(DÉBITOS DO MÊS ANTERIOR|ENCARGOS POR ATRASO|PAGAMENTO EFETUADO)', linha)
-        if match:
-            bloco_limpo_linhas.append(linha[:match.start()])
-        else:
-            bloco_limpo_linhas.append(linha)
+        linha_processada = linha[:match.start()] if match else linha
+        # Remove o texto dos cabeçalhos para evitar que seja pego como parcela
+        if not any(h in linha_processada for h in ["Lançamentos", "Débitos do Mês"]):
+            bloco_limpo_linhas.append(linha_processada)
+
     bloco_limpo = "\n".join(bloco_limpo_linhas)
 
     for m in PADRAO_PARCELA_MESMA_LINHA.finditer(bloco_limpo):
         lbl = limpar_rotulo(m.group(1))
-        if 'DESCONTO' in lbl.upper():
-            continue
         val = to_float(m.group(2))
         if lbl and lbl not in itens and val is not None:
             itens[lbl] = val
@@ -185,11 +177,7 @@ def extrair_parcelas(bloco: str):
     linhas = bloco_limpo.splitlines()
     for i, linha in enumerate(linhas):
         linha_limpa = linha.strip()
-        if not linha_limpa:
-            continue
-        
-        if 'DESCONTO' in linha_limpa.upper():
-            continue
+        if not linha_limpa: continue
 
         is_potential_label = (
             any(c.isalpha() for c in linha_limpa) and
@@ -197,93 +185,120 @@ def extrair_parcelas(bloco: str):
             limpar_rotulo(linha_limpa) not in itens and
             not PADRAO_PARCELA_MESMA_LINHA.match(linha_limpa)
         )
-
         if is_potential_label:
             j = i + 1
-            while j < len(linhas) and not linhas[j].strip():
-                j += 1
+            while j < len(linhas) and not linhas[j].strip(): j += 1
             if j < len(linhas):
-                proxima_linha = linhas[j].strip()
-                match_num = PADRAO_NUMERO_PURO.match(proxima_linha)
+                match_num = PADRAO_NUMERO_PURO.match(linhas[j].strip())
                 if match_num:
                     lbl = limpar_rotulo(linha_limpa)
                     val = to_float(match_num.group(1))
-                    if lbl and lbl not in itens and val is not None:
-                        itens[lbl] = val
+                    if lbl and lbl not in itens and val is not None: itens[lbl] = val
     return itens
 
-def processar_pdf(texto_pdf: str, modo_separacao: str, emp_fixo: str = None):
+# ==== Funções de Processamento ====
+
+def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto: str = None):
     blocos = fatiar_blocos(texto_pdf)
-    logger.info(f"Encontrados {len(blocos)} lotes para processamento.")
-    if not blocos:
-        logger.warning("Nenhum bloco de lote foi encontrado no PDF.")
-        return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+    if not blocos: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-    linhas_todas, linhas_cov, linhas_div, linhas_erros = [], [], [], []
-
+    linhas_todas, linhas_cov, linhas_div = [], [], []
     for lote, bloco in blocos:
-        try:
-            emp_atual = emp_fixo if modo_separacao == 'boleto' else detectar_emp_por_lote(lote)
-            
-            if emp_atual == 'SBRR':
-                emp_especifico = detectar_emp_por_lote(lote)
-                if emp_especifico in ['SBRR I', 'SBRR II', 'SBRR III']:
-                    emp_atual = emp_especifico
+        if modo_separacao == 'boleto':
+            emp_atual = detectar_emp_por_lote(lote) if emp_fixo_boleto == "SBRR" else emp_fixo_boleto
+        else: # debito_credito
+            emp_atual = detectar_emp_por_lote(lote)
 
-            cliente = tentar_nome_cliente(bloco)
-            itens = extrair_parcelas(bloco)
-            
-            VALORES_CORRETOS = fixos_do_emp(emp_atual)
+        cliente = tentar_nome_cliente(bloco)
+        itens = extrair_parcelas(bloco)
+        VALORES_CORRETOS = fixos_do_emp(emp_atual)
 
-            for rot, val in itens.items():
-                linhas_todas.append({"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
+        for rot, val in itens.items():
+            linhas_todas.append({"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
 
-            cov = {"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente}
-            for k in VALORES_CORRETOS.keys(): cov[k] = None
-            
-            for rot, val in itens.items():
-                if rot in VALORES_CORRETOS:
-                    cov[rot] = val
-            
-            vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
-            cov["QtdParc_Alvo"] = len(vistos)
-            cov["Parc_Alvo"] = ", ".join(vistos)
-            linhas_cov.append(cov)
+        cov = {"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente}
+        for k in VALORES_CORRETOS.keys(): cov[k] = None
+        for rot, val in itens.items():
+            if rot in VALORES_CORRETOS: cov[rot] = val
+        
+        vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
+        cov["QtdParc_Alvo"] = len(vistos)
+        cov["Parc_Alvo"] = ", ".join(vistos)
+        linhas_cov.append(cov)
 
-            for rot in vistos:
-                val = cov[rot]
-                if val is None: continue
-                permitidos = VALORES_CORRETOS.get(rot, [])
-                if all(abs(val - v) > 1e-6 for v in permitidos):
-                    linhas_div.append({
-                        "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
-                        "Parcela": rot, "Valor no Documento": float(val),
-                        "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
-                    })
-        except Exception as e:
-            logger.exception(f"Falha ao processar o lote {lote}. O processamento continuará com o próximo.")
-            linhas_erros.append({"Lote": lote, "Erro": str(e)})
-            continue
-
-    vistos = set()
-    linhas_div_dedup = []
-    for r in linhas_div:
-        chave = (r["Lote"], r["Parcela"])
-        if chave not in vistos:
-            linhas_div_dedup.append(r)
-            vistos.add(chave)
+        for rot in vistos:
+            val = cov[rot]
+            if val is None: continue
+            permitidos = VALORES_CORRETOS.get(rot, [])
+            if all(abs(val - v) > 1e-6 for v in permitidos):
+                linhas_div.append({
+                    "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
+                    "Parcela": rot, "Valor no Documento": float(val),
+                    "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
+                })
 
     df_todas = pd.DataFrame(linhas_todas)
     df_cov = pd.DataFrame(linhas_cov)
-    df_div = pd.DataFrame(linhas_div_dedup)
-    df_erros = pd.DataFrame(linhas_erros)
+    df_div = pd.DataFrame(linhas_div)
     
-    return df_todas, df_cov, df_div, df_erros
+    return df_todas, df_cov, df_div
+
+def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_boleto):
+    df_todas_ant, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
+    df_todas_atu, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
+    
+    df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
+    df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
+
+    # Merge completo para comparação
+    df_comp = pd.merge(
+        df_todas_ant, df_todas_atu,
+        on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'],
+        how='outer',
+        suffixes=('_ant', '_atu')
+    )
+
+    # 1. Lotes Adicionados/Removidos
+    lotes_ant = df_todas_ant[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
+    lotes_atu = df_todas_atu[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
+    
+    lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Lote', 'Cliente'], how='outer', indicator=True, suffixes=('_ant', '_atu'))
+    
+    df_adicionados = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento_atu', 'Lote', 'Cliente']].rename(columns={'Empreendimento_atu': 'Empreendimento'})
+    df_removidos = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento_ant', 'Lote', 'Cliente']].rename(columns={'Empreendimento_ant': 'Empreendimento'})
+
+    # 2. Divergências de Valor
+    df_divergencias = df_comp[
+        (pd.notna(df_comp['Valor Anterior'])) & 
+        (pd.notna(df_comp['Valor Atual'])) &
+        (df_comp['Valor Anterior'] != df_comp['Valor Atual'])
+    ].copy()
+    df_divergencias['Diferença'] = df_divergencias['Valor Atual'] - df_divergencias['Valor Anterior']
+
+    # 3. Alterações de Parcelas (Novas/Removidas dentro de um lote)
+    df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna()][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
+    df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna()][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
+    
+    # Monta um resumo
+    resumo = {
+        "Lotes Mês Anterior": len(lotes_ant),
+        "Lotes Mês Atual": len(lotes_atu),
+        "Lotes Adicionados": len(df_adicionados),
+        "Lotes Removidos": len(df_removidos),
+        "Parcelas com Valor Alterado": len(df_divergencias)
+    }
+    df_resumo = pd.DataFrame([resumo])
+
+    return df_resumo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
+
+
+# ==== Funções de Formatação do Excel ====
 
 def formatar_excel(output_stream, dfs: dict):
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
         for sheet_name, df in dfs.items():
-            df.to_excel(writer, index=False, sheet_name=sheet_name)
+            if not df.empty:
+                df.to_excel(writer, index=False, sheet_name=sheet_name)
 
         number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
         for sheet_name in writer.sheets:
@@ -299,7 +314,6 @@ def formatar_excel(output_stream, dfs: dict):
                 adjusted_width = (max_length + 2)
                 worksheet.column_dimensions[column].width = adjusted_width
     return output_stream
-
 
 # --- Início da Aplicação Web Flask ---
 
@@ -317,11 +331,7 @@ def upload_file():
     file = request.files['pdf_file']
     modo_separacao = request.form.get('modo_separacao', 'boleto')
 
-    logger.info(f"Requisição recebida. Arquivo: '{file.filename}', Modo: '{modo_separacao}'.")
-
-    if file.filename == '':
-        logger.warning("Tentativa de upload sem arquivo selecionado.")
-        return "Nenhum arquivo selecionado.", 400
+    if file.filename == '': return "Nenhum arquivo selecionado.", 400
 
     if file and file.filename.lower().endswith('.pdf'):
         try:
@@ -329,83 +339,125 @@ def upload_file():
             if modo_separacao == 'boleto':
                 emp_fixo = detectar_emp_por_nome_arquivo(file.filename)
                 if not emp_fixo:
-                    logger.error(f"Empreendimento não identificado no nome do arquivo '{file.filename}' (Modo Boleto).")
                     return f"""<h1>Erro: Empreendimento não identificado (Modo Boleto)</h1>
                            <p>O nome do arquivo <strong>'{file.filename}'</strong> não corresponde a um empreendimento mapeado.</p>
                            <p>Para o modo 'Boleto', o nome do arquivo precisa terminar com um dos códigos (ex: 'Extrato_IATE.pdf').</p>
                            <a href="/">Voltar</a>""", 400
-                logger.info(f"Empreendimento detectado pelo nome do arquivo: '{emp_fixo}'.")
 
             pdf_stream = file.read()
             texto_pdf = extrair_texto_pdf(pdf_stream)
-            if not texto_pdf:
-                logger.error(f"Não foi possível extrair texto do PDF '{file.filename}'.")
-                return "Não foi possível extrair texto do PDF.", 500
+            if not texto_pdf: return "Não foi possível extrair texto do PDF.", 500
 
-            df_todas, df_cov, df_div, df_erros = processar_pdf(texto_pdf, modo_separacao, emp_fixo)
+            df_todas, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
             
-            # Ordenação dos dataframes
             if not df_div.empty: df_div = df_div.sort_values(by=['Empreendimento', 'Lote'])
             if not df_cov.empty: df_cov = df_cov.sort_values(by=['Empreendimento', 'Lote'])
             if not df_todas.empty: df_todas = df_todas.sort_values(by=['Empreendimento', 'Lote'])
 
-            # Geração do Excel
             output = io.BytesIO()
-            dfs_to_excel = OrderedDict([
-                ("Divergencias", df_div),
-                ("Cobertura_Analise", df_cov),
-                ("Todas_Parcelas_Extraidas", df_todas)
-            ])
-            if not df_erros.empty:
-                dfs_to_excel["Lotes_Com_Erro"] = df_erros
+            dfs_to_excel = {
+                "Divergencias": df_div,
+                "Cobertura_Analise": df_cov,
+                "Todas_Parcelas_Extraidas": df_todas
+            }
             formatar_excel(output, dfs_to_excel)
             output.seek(0)
 
-            # Salvar Relatório
             base_name = os.path.splitext(file.filename)[0]
             report_filename = f"relatorio_{base_name}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
             report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
-            with open(report_path, 'wb') as f: f.write(output.getvalue())
-            logger.info(f"Relatório salvo com sucesso em '{report_path}'.")
             
-            # ALTERAÇÃO: Converter DataFrames para JSON em vez de HTML
-            # O formato 'split' é ótimo pois separa colunas e dados, facilitando o uso no JS
-            divergencias_json = df_div.to_json(orient="split", index=False) if not df_div.empty else None
-            erros_json = df_erros.to_json(orient="split", index=False) if not df_erros.empty else None
+            with open(report_path, 'wb') as f: f.write(output.getvalue())
 
-            # Cálculo dos totais
+            div_html = df_div.to_html(classes='table table-striped table-hover', index=False, border=0) if not df_div.empty else "<p>Nenhuma divergência encontrada.</p>"
+            
             total_lotes = len(df_cov)
             total_divergencias = len(df_div)
             nao_classificados = len(df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO']) if not df_cov.empty else 0
-            total_erros = len(df_erros)
-
-            logger.info(f"Análise de '{file.filename}' concluída. Lotes: {total_lotes}, Divergências: {total_divergencias}, Não Classificados: {nao_classificados}, Erros: {total_erros}.")
 
             return render_template('results.html',
+                                   table=div_html,
                                    total_lotes=total_lotes,
                                    total_divergencias=total_divergencias,
                                    nao_classificados=nao_classificados,
-                                   total_erros=total_erros,
                                    download_url=url_for('download_file', filename=report_filename),
-                                   modo_usado=modo_separacao,
-                                   # ALTERAÇÃO: Passar os dados JSON para o template
-                                   divergencias_json=divergencias_json,
-                                   erros_json=erros_json)
+                                   modo_usado=modo_separacao)
         
-        except Exception:
-            logger.exception(f"Ocorreu um erro inesperado e fatal durante o processamento do arquivo '{file.filename}'.")
+        except Exception as e:
+            print(f"Ocorreu um erro no processamento: {e}", file=sys.stderr)
+            traceback.print_exc()
             return f"Ocorreu um erro inesperado durante o processamento. Verifique os logs do servidor.", 500
     
-    logger.warning(f"Tentativa de upload de arquivo com formato inválido: '{file.filename}'.")
     return "Formato de arquivo inválido. Por favor, envie um PDF.", 400
+
+@app.route('/compare', methods=['POST'])
+def compare_files():
+    if 'pdf_mes_anterior' not in request.files or 'pdf_mes_atual' not in request.files:
+        return "Ambos os arquivos (mês anterior e atual) são necessários.", 400
+
+    file_ant = request.files['pdf_mes_anterior']
+    file_atu = request.files['pdf_mes_atual']
+    modo_separacao = request.form.get('modo_separacao_comp', 'boleto')
+
+    if file_ant.filename == '' or file_atu.filename == '':
+        return "Selecione os dois arquivos para comparar.", 400
+
+    try:
+        emp_fixo_boleto = None
+        if modo_separacao == 'boleto':
+            emp_ant = detectar_emp_por_nome_arquivo(file_ant.filename)
+            emp_atu = detectar_emp_por_nome_arquivo(file_atu.filename)
+            if not emp_ant or not emp_atu:
+                return "Modo Boleto: Empreendimento não identificado em um dos arquivos.", 400
+            if emp_ant != emp_atu:
+                return "Modo Boleto: Os arquivos devem ser do mesmo empreendimento.", 400
+            emp_fixo_boleto = emp_ant
+
+        texto_ant = extrair_texto_pdf(file_ant.read())
+        texto_atu = extrair_texto_pdf(file_atu.read())
+
+        if not texto_ant or not texto_atu:
+            return "Não foi possível extrair texto de um dos PDFs.", 500
+
+        df_resumo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas = processar_comparativo(
+            texto_ant, texto_atu, modo_separacao, emp_fixo_boleto
+        )
+
+        output = io.BytesIO()
+        dfs_to_excel = {
+            "Resumo": df_resumo,
+            "Lotes Adicionados": df_adicionados,
+            "Lotes Removidos": df_removidos,
+            "Divergências de Valor": df_divergencias,
+            "Parcelas Novas por Lote": df_parc_novas,
+            "Parcelas Removidas por Lote": df_parc_removidas,
+        }
+        formatar_excel(output, dfs_to_excel)
+        output.seek(0)
+        
+        report_filename = f"comparativo_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
+        report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
+        with open(report_path, 'wb') as f: f.write(output.getvalue())
+
+        return render_template('compare_results.html',
+                               resumo=df_resumo.to_dict('records')[0],
+                               adicionados=df_adicionados.to_html(classes='table table-sm table-striped', index=False, border=0),
+                               removidos=df_removidos.to_html(classes='table table-sm table-striped', index=False, border=0),
+                               divergencias=df_divergencias.to_html(classes='table table-sm table-striped', index=False, border=0),
+                               download_url=url_for('download_file', filename=report_filename))
+
+    except Exception as e:
+        print(f"Ocorreu um erro na comparação: {e}", file=sys.stderr)
+        import traceback
+        traceback.print_exc()
+        return f"Ocorreu um erro inesperado durante a comparação. Verifique os logs.", 500
+
 
 @app.route('/download/<filename>')
 def download_file(filename):
     path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    logger.info(f"Iniciando download do relatório '{filename}'.")
     return send_file(path, as_attachment=True)
 
 if __name__ == '__main__':
-    logger.info("Iniciando a aplicação Flask em modo de desenvolvimento.")
     app.run(debug=True, host='0.0.0.0', port=8080)
 
