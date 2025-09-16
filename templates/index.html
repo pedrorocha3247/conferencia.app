@@ -12,36 +12,33 @@
             background-color: #222;
         }
         
-        /* --- NOVO: Estilos para a tela de Splash --- */
         #splash-screen {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background-color: #222; /* Mesma cor de fundo do app */
+            background-color: #222;
             display: flex;
             justify-content: center;
             align-items: center;
             z-index: 9999;
             opacity: 1;
-            transition: opacity 0.8s ease-out; /* Transição suave de fade-out */
+            transition: opacity 0.8s ease-out;
         }
 
         #splash-screen img {
-            max-width: 250px;
+            /* <<NOVA ALTERAÇÃO>>: Logo inicial aumentado */
+            max-width: 350px;
             width: 80%;
-            /* Animação de "indo e vindo" (pulsar) */
             animation: pulse 2s infinite ease-in-out;
         }
 
-        /* Animação Keyframes */
         @keyframes pulse {
             0% { transform: scale(1); }
             50% { transform: scale(1.08); }
             100% { transform: scale(1); }
         }
-        /* --- FIM DOS ESTILOS DE SPLASH --- */
 
         .container {
             max-width: 700px;
@@ -165,7 +162,7 @@
                         <input type="file" class="form-control" name="pdf_mes_atual" id="pdf_mes_atual" accept=".pdf" required>
                     </div>
 
-                    <div class="d-grid mt-4">
+                    <div class="d-grid mt-4 mb-2">
                         <button id="compare-button" type="submit" class="btn btn-primary btn-lg">
                             <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
                             <span class="button-text">Comparar Arquivos</span>
@@ -192,23 +189,18 @@
         setupFormSubmitSpinner('upload-form', 'submit-button');
         setupFormSubmitSpinner('compare-form', 'compare-button');
 
-        // --- NOVO: Script para controlar a tela de Splash ---
         window.onload = function() {
             const splashScreen = document.getElementById('splash-screen');
             const mainContent = document.getElementById('main-content');
 
-            // Define quanto tempo a splash screen fica visível (em milissegundos)
-            const splashDuration = 2500; // 2.5 segundos
+            const splashDuration = 2500;
 
             setTimeout(() => {
-                // Inicia o fade-out da splash screen
                 splashScreen.style.opacity = '0';
-
-                // Espera a transição de fade-out terminar para esconder a splash e mostrar o app
                 setTimeout(() => {
                     splashScreen.style.display = 'none';
                     mainContent.style.display = 'block';
-                }, 800); // Deve ser igual à duração da transição no CSS
+                }, 800);
 
             }, splashDuration);
         };
