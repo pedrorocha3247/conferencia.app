@@ -5,40 +5,39 @@ app = Flask(__name__)
 
 @app.route('/')
 def index():
-    # --- Início do Código de Diagnóstico ---
-    # Vamos escrever informações importantes nos logs do Render
+    # --- INÍCIO DO DIAGNÓSTICO AVANÇADO ---
+    template_path = os.path.join(os.getcwd(), 'templates', 'index.html')
     
-    # 1. Qual é o diretório de trabalho atual do app?
-    cwd = os.getcwd()
-    print(f"DIAGNÓSTICO: Diretório de Trabalho Atual: {cwd}")
-
-    # 2. O que existe dentro deste diretório?
-    try:
-        dir_contents = os.listdir(cwd)
-        print(f"DIAGNÓSTICO: Conteúdo do Diretório: {dir_contents}")
-    except Exception as e:
-        print(f"DIAGNÓSTICO: Erro ao listar diretório: {e}")
-
-    # 3. A pasta 'templates' existe aqui?
-    templates_dir_path = os.path.join(cwd, 'templates')
-    templates_dir_exists = os.path.exists(templates_dir_path)
-    print(f"DIAGNÓSTICO: A pasta 'templates' existe? {templates_dir_exists}")
+    print("--- INICIANDO DIAGNÓSTICO AVANÇADO ---")
     
-    # 4. O arquivo 'templates/index.html' existe?
-    template_file_path = os.path.join(templates_dir_path, 'index.html')
-    template_file_exists = os.path.exists(template_file_path)
-    print(f"DIAGNÓSTICO: O arquivo 'index.html' existe? {template_file_exists}")
-
-    # Se o arquivo não for encontrado, exibe uma mensagem de erro clara na tela
-    if not template_file_exists:
-        return f"""
-        <h1>Erro Crítico de Carregamento</h1>
-        <p>O arquivo de template não foi encontrado no caminho esperado.</p>
-        <p><b>Diretório verificado:</b> {template_file_path}</p>
-        <p>Verifique a estrutura de pastas do seu projeto e o nome do arquivo.</p>
-        """
-    # --- Fim do Código de Diagnóstico ---
+    file_exists = os.path.exists(template_path)
+    print(f"DIAGNÓSTICO: O arquivo '{template_path}' existe? {file_exists}")
     
+    if file_exists:
+        try:
+            # 1. Verifica o tamanho do arquivo
+            file_size = os.path.getsize(template_path)
+            print(f"DIAGNÓSTICO: Tamanho do arquivo: {file_size} bytes.")
+            
+            # 2. Tenta ler os primeiros 100 caracteres do arquivo
+            with open(template_path, 'r', encoding='utf-8') as f:
+                content_preview = f.read(100)
+                print(f"DIAGNÓSTICO: Prévia do conteúdo: '{content_preview}...'")
+            
+            # Se o arquivo estiver vazio, mostra uma mensagem de erro clara no navegador
+            if file_size == 0:
+                return "<h1>Erro Confirmado: Arquivo Vazio</h1><p>O arquivo 'index.html' no servidor existe, mas seu conteúdo está em branco (0 bytes). Por favor, verifique o arquivo no seu repositório Git e envie uma nova versão com o conteúdo correto.</p>"
+
+        except Exception as e:
+            print(f"DIAGNÓSTICO: ERRO AO LER O ARQUIVO: {e}")
+            return f"<h1>Erro ao ler o arquivo</h1><p>{e}</p>"
+    else:
+        return "<h1>Erro Crítico: Arquivo Não Encontrado</h1><p>O arquivo de template não foi encontrado no caminho '{template_path}'.</p>"
+
+    print("--- DIAGNÓSTICO CONCLUÍDO ---")
+    # --- FIM DO DIAGNÓSTICO ---
+    
+    # Se passar por todas as verificações, tenta renderizar o template
     return render_template('index.html')
 
 @app.route('/healthz')
