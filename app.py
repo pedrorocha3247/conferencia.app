@@ -29,12 +29,14 @@ PADRAO_PARCELA_MESMA_LINHA = re.compile(
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
 
+# <<ALTERAÇÃO 1>>: Adicionado '07': 'RSCV'
 CODIGO_EMP_MAP = {
-    '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'TSCV', '08': 'RSCIII',
+    '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'RSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
 
+# <<ALTERAÇÃO 2>>: Adicionado "RSCV" com seus valores
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -231,6 +233,11 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
     df_todas = pd.DataFrame(linhas_todas)
     df_cov = pd.DataFrame(linhas_cov)
     df_div = pd.DataFrame(linhas_div)
+    
+    # <<ALTERAÇÃO 3>>: Filtra linhas indesejadas do relatório detalhado
+    if not df_todas.empty:
+        parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+        df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
     
     return df_todas, df_cov, df_div
 
@@ -430,4 +437,3 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
-
