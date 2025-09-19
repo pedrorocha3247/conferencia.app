@@ -19,18 +19,22 @@ HEADERS = (
     "Vencimento", "Lançamentos", "Programação", "Carta", "DÉBITOS", "ENCARGOS",
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
+
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.([A-Z0-9\u0399\u039A]{2})\.\d{1,4})\b")
+
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
     r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*"
     r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/\d]+?)\s+([\d.,]+)"
     r"(?=\s{2,}|\t|$)", re.MULTILINE
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
+
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'RSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
+
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -45,6 +49,7 @@ EMP_MAP = {
     "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "RSCV": {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00},
 }
+
 BASE_FIXOS = {
     "Taxa de Conservação": [434.11],
     "Contrib. Social SLIM": [103.00, 309.00],
@@ -58,6 +63,7 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+
 def manual_render_template(template_name, status_code=200, **kwargs):
     template_path = os.path.join(app.root_path, 'templates', template_name)
     try:
@@ -66,6 +72,7 @@ def manual_render_template(template_name, status_code=200, **kwargs):
         
         for key, value in kwargs.items():
             placeholder = f"__{key.upper()}__"
+            # Lida com o caso especial de dados JSON injetados no <script>
             if isinstance(value, str) and ('{' in value and '}' in value):
                  html_content = html_content.replace(f'"{placeholder}"', value)
             else:
@@ -76,9 +83,11 @@ def manual_render_template(template_name, status_code=200, **kwargs):
         return response, status_code
     except Exception as e:
         print(f"ERRO CRÍTICO AO RENDERIZAR MANUALMENTE '{template_name}': {e}")
-        return f"<h1>Erro 500: Falha Crítica ao Carregar Template</h1><p>O arquivo {template_name} não pôde ser lido.</p>", 500
+        return f"<h1>Erro 500: Falha Crítica ao Carregar Template</h1><p>O arquivo {template_name} não pôde ser lido. Erro: {e}</p>", 500
+
 
 # ==== Funções de Normalização e Extração ====
+
 def normalizar_texto(s: str) -> str:
     s = s.translate(DASHES).replace("\u00A0", " ")
     s = "".join(ch for ch in s if ch not in "\u200B\u200C\u200D\uFEFF")
@@ -102,6 +111,7 @@ def to_float(s: str):
         return None
 
 # ==== Funções de Lógica e Classificação ====
+
 def fixos_do_emp(emp: str):
     if emp not in EMP_MAP:
         return BASE_FIXOS
@@ -128,6 +138,7 @@ def detectar_emp_por_lote(lote: str):
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
 # ==== Funções de Extração de Dados ====
+
 def limpar_rotulo(lbl: str) -> str:
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
@@ -299,7 +310,6 @@ def index():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    print("LOG: [1/7] Rota /upload iniciada.")
     if 'pdf_file' not in request.files or request.files['pdf_file'].filename == '':
         return manual_render_template('error.html', status_code=400,
             error_title="Nenhum arquivo enviado", 
@@ -307,7 +317,6 @@ def upload_file():
     
     file = request.files['pdf_file']
     modo_separacao = request.form.get('modo_separacao', 'boleto')
-    print(f"LOG: [2/7] Arquivo '{file.filename}' recebido no modo '{modo_separacao}'.")
 
     try:
         emp_fixo = None
@@ -320,33 +329,34 @@ def upload_file():
                     error_title="Empreendimento não identificado", error_message=error_msg)
 
         pdf_stream = file.read()
-        print("LOG: [3/7] Arquivo PDF lido para a memória.")
-
         texto_pdf = extrair_texto_pdf(pdf_stream)
-        print("LOG: [4/7] Texto extraído do PDF.")
+        if not texto_pdf:
+            return manual_render_template('error.html', status_code=500,
+                error_title="Erro ao ler o PDF", 
+                error_message="Não foi possível extrair o texto do arquivo enviado. Ele pode estar corrompido ou ser uma imagem.")
 
         df_todas, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
-        print("LOG: [5/7] Dados processados nos dataframes.")
-
+        
         output = io.BytesIO()
         dfs_to_excel = {"Divergencias": df_div, "Cobertura_Analise": df_cov, "Todas_Parcelas_Extraidas": df_todas}
         formatar_excel(output, dfs_to_excel)
         output.seek(0)
-        print("LOG: [6/7] Planilha Excel gerada em memória.")
-        
+
         base_name = os.path.splitext(file.filename)[0]
         report_filename = f"relatorio_{base_name}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
         report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
         
         with open(report_path, 'wb') as f: f.write(output.getvalue())
-        
-        print("LOG: [7/7] Planilha salva no disco. Preparando para enviar a resposta.")
-        
+
+        nao_classificados = 0
+        if not df_cov.empty and 'Empreendimento' in df_cov.columns:
+            nao_classificados = df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO'].shape[0]
+
         return manual_render_template('results.html',
             divergencias_json=df_div.to_json(orient='split', index=False) if not df_div.empty else 'null',
             total_lotes=len(df_cov),
             total_divergencias=len(df_div),
-            nao_classificados=len(df_cov.get('Empreendimento', pd.Series(dtype=str))[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO'].size),
+            nao_classificados=nao_classificados,
             download_url=url_for('download_file', filename=report_filename),
             modo_usado=modo_separacao
         )
