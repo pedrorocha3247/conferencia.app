@@ -319,16 +319,39 @@ app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+# <<NOVA FUNÇÃO>>: Renderizador manual para evitar problemas com o render_template do Flask
+def manual_render_template(template_name, status_code=200, **kwargs):
+    template_path = os.path.join(app.root_path, 'templates', template_name)
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        # Substitui os placeholders pelos valores passados
+        for key, value in kwargs.items():
+            placeholder = f"__{key.upper()}__"
+            html_content = html_content.replace(placeholder, str(value))
+
+        response = make_response(html_content)
+        response.headers['Content-Type'] = 'text/html'
+        return response, status_code
+    except Exception as e:
+        print(f"ERRO CRÍTICO AO RENDERIZAR MANUALMENTE '{template_name}': {e}")
+        # Retorna um erro básico se até o renderizador manual falhar
+        return f"<h1>Erro 500: Falha Crítica ao Carregar Template</h1><p>O arquivo {template_name} não pôde ser lido.</p>", 500
+
 @app.route('/')
 def index():
-    return render_template('index.html')
+    # Usa o novo renderizador manual
+    return manual_render_template('index.html')
+
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'pdf_file' not in request.files or request.files['pdf_file'].filename == '':
-        return render_template('error.html', 
-                               error_title="Nenhum arquivo enviado", 
-                               error_message="Você precisa selecionar um arquivo PDF para fazer a análise."), 400
+        return manual_render_template('error.html', 
+                                      status_code=400,
+                                      error_title="Nenhum arquivo enviado", 
+                                      error_message="Você precisa selecionar um arquivo PDF para fazer a análise.")
     
     file = request.files['pdf_file']
     modo_separacao = request.form.get('modo_separacao', 'boleto')
@@ -338,12 +361,13 @@ def upload_file():
         if modo_separacao == 'boleto':
             emp_fixo = detectar_emp_por_nome_arquivo(file.filename)
             if not emp_fixo:
-                # <<NOVA ALTERAÇÃO>>: Renderiza o template de erro em vez de retornar HTML simples
                 error_msg = ("Para o modo 'Boleto', o nome do arquivo precisa terminar com um código de empreendimento (ex: 'Extrato_IATE.pdf'). "
                              "Você pode ter selecionado o modo de análise errado para este tipo de arquivo.")
-                return render_template('error.html', 
-                                       error_title="Empreendimento não identificado", 
-                                       error_message=error_msg), 400
+                return manual_render_template('error.html',
+                                              status_code=400,
+                                              error_title="Empreendimento não identificado", 
+                                              error_message=error_msg)
+
 
         pdf_stream = file.read()
         texto_pdf = extrair_texto_pdf(pdf_stream)
@@ -376,6 +400,7 @@ def upload_file():
                                nao_classificados=len(df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO']) if not df_cov.empty else 0,
                                download_url=url_for('download_file', filename=report_filename),
                                modo_usado=modo_separacao)
+        return "<h1>Processamento Concluído</h1><p>A lógica para exibir os resultados precisa ser adaptada para o renderizador manual.</p>"
     
     except Exception as e:
         traceback.print_exc()
@@ -452,4 +477,5 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
 
