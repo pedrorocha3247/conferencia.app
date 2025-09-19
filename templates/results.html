@@ -10,6 +10,7 @@
   body { padding-bottom: 50px; }
   .card { border: none; }
   .header-logo { max-height: 50px; width: auto; }
+  .summary-item strong { text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -18,20 +19,32 @@
         <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logótipo da Empresa" class="header-logo">
         <a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
     </div>
-    <div class="card border-primary mb-4">
+    <div class="card mb-4">
         <div class="card-body">
             <h5 class="card-title mb-3">Resumo da Análise</h5>
             <div class="row text-center">
-                <div class="col-md-3"><strong>Modo de Análise</strong><div><span>__MODO_USADO__</span></div></div>
-                <div class="col-md-3"><strong>Total de Lotes</strong><div><span>__TOTAL_LOTES__</span></div></div>
-                <div class="col-md-3"><strong>Total de Divergências</strong><div><span>__TOTAL_DIVERGENCIAS__</span></div></div>
-                <div class="col-md-3"><strong>Não Classificados</strong><div><span>__NAO_CLASSIFICADOS__</span></div></div>
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Modo de Análise</strong>
+                    <div><span class="badge bg-primary fs-6 mt-1">__MODO_USADO__</span></div>
+                </div>
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Total de Lotes Processados</strong>
+                    <div><span class="badge bg-secondary fs-6 mt-1">__TOTAL_LOTES__</span></div>
+                </div>
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Total de Divergências</strong>
+                    <div><span class="badge bg-danger fs-6 mt-1">__TOTAL_DIVERGENCIAS__</span></div>
+                </div>
+                <div class="col-md summary-item">
+                    <strong>Não Classificados</strong>
+                    <div><span class="badge bg-warning fs-6 mt-1">__NAO_CLASSIFICADOS__</span></div>
+                </div>
             </div>
             <hr>
             <a href="__DOWNLOAD_URL__" class="btn btn-success">Baixar Relatório Completo (.xlsx)</a>
         </div>
     </div>
-    <div class="card border-info">
+    <div class="card">
         <div class="card-header"><h4>Tabela de Divergências</h4></div>
         <div class="card-body">
             <table id="tabela-divergencias" class="table table-striped" style="width:100%"></table>
