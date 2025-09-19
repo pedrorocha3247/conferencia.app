@@ -326,7 +326,10 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'pdf_file' not in request.files or request.files['pdf_file'].filename == '':
-        return "Nenhum arquivo enviado.", 400
+        return render_template('error.html', 
+                               error_title="Nenhum arquivo enviado", 
+                               error_message="Você precisa selecionar um arquivo PDF para fazer a análise."), 400
+    
     file = request.files['pdf_file']
     modo_separacao = request.form.get('modo_separacao', 'boleto')
 
@@ -335,11 +338,19 @@ def upload_file():
         if modo_separacao == 'boleto':
             emp_fixo = detectar_emp_por_nome_arquivo(file.filename)
             if not emp_fixo:
-                return f"<h1>Erro: Empreendimento não identificado.</h1><p>Para o modo 'Boleto', o nome do arquivo precisa terminar com um dos códigos (ex: 'Extrato_IATE.pdf').</p>", 400
+                # <<NOVA ALTERAÇÃO>>: Renderiza o template de erro em vez de retornar HTML simples
+                error_msg = ("Para o modo 'Boleto', o nome do arquivo precisa terminar com um código de empreendimento (ex: 'Extrato_IATE.pdf'). "
+                             "Você pode ter selecionado o modo de análise errado para este tipo de arquivo.")
+                return render_template('error.html', 
+                                       error_title="Empreendimento não identificado", 
+                                       error_message=error_msg), 400
 
         pdf_stream = file.read()
         texto_pdf = extrair_texto_pdf(pdf_stream)
-        if not texto_pdf: return "Não foi possível extrair texto do PDF.", 500
+        if not texto_pdf:
+            return render_template('error.html', 
+                                   error_title="Erro ao ler o PDF", 
+                                   error_message="Não foi possível extrair o texto do arquivo enviado. Ele pode estar corrompido ou ser uma imagem."), 500
 
         df_todas, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
         
@@ -368,7 +379,9 @@ def upload_file():
     
     except Exception as e:
         traceback.print_exc()
-        return f"Ocorreu um erro inesperado durante o processamento: {e}", 500
+        return render_template('error.html', 
+                               error_title="Erro inesperado no processamento", 
+                               error_message=f"Ocorreu um erro grave durante a análise do arquivo. Detalhes: {e}"), 500
 
 @app.route('/compare', methods=['POST'])
 def compare_files():
@@ -429,11 +442,14 @@ def compare_files():
     except Exception as e:
         traceback.print_exc()
         return f"Ocorreu um erro inesperado durante a comparação: {e}", 500
+  
 
 @app.route('/download/<filename>')
 def download_file(filename):
     path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     return send_file(path, as_attachment=True)
 
+
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
