@@ -336,7 +336,14 @@ def upload_file():
                 return manual_render_template('error.html', status_code=400,
                                               error_title="Modo de Análise Incorreto",
                                               error_message=error_msg)
-                
+
+        pdf_stream = file.read()
+        texto_pdf = extrair_texto_pdf(pdf_stream)
+        if not texto_pdf:
+            return manual_render_template('error.html', status_code=500,
+                error_title="Erro ao ler o PDF", 
+                error_message="Não foi possível extrair o texto do arquivo enviado. Ele pode estar corrompido ou ser uma imagem.")
+
         df_todas, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
         
         output = io.BytesIO()
@@ -360,7 +367,7 @@ def upload_file():
             total_divergencias=len(df_div),
             nao_classificados=nao_classificados,
             download_url=url_for('download_file', filename=report_filename),
-            modo_usado=modo_separacao
+            modo_usado=modo_separacao.replace('_', '/')
         )
     
     except Exception as e:
@@ -368,7 +375,7 @@ def upload_file():
         return manual_render_template('error.html', status_code=500,
             error_title="Erro inesperado no processamento", 
             error_message=f"Ocorreu um erro grave durante a análise do arquivo. Detalhes: {e}")
-
+        
 @app.route('/compare', methods=['POST'])
 def compare_files():
     if 'pdf_mes_anterior' not in request.files or 'pdf_mes_atual' not in request.files:
@@ -452,4 +459,5 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
 
