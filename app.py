@@ -29,14 +29,12 @@ PADRAO_PARCELA_MESMA_LINHA = re.compile(
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
 
-# <<ALTERAÇÃO 1>>: Adicionado '07': 'RSCV'
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'RSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
 
-# <<ALTERAÇÃO 2>>: Adicionado "RSCV" com seus valores
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -234,7 +232,6 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
     df_cov = pd.DataFrame(linhas_cov)
     df_div = pd.DataFrame(linhas_div)
     
-    # <<ALTERAÇÃO 3>>: Filtra linhas indesejadas do relatório detalhado
     if not df_todas.empty:
         parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
         df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
@@ -248,11 +245,7 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
     df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
 
-    df_comp = pd.merge(
-        df_todas_ant, df_todas_atu,
-        on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'],
-        how='outer'
-    )
+    df_comp = pd.merge(df_todas_ant, df_todas_atu, on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'], how='outer')
 
     lotes_ant = df_todas_ant[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_atu = df_todas_atu[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
@@ -262,11 +255,7 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_adicionados = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento', 'Lote', 'Cliente']]
     df_removidos = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento', 'Lote', 'Cliente']]
 
-    df_divergencias = df_comp[
-        (pd.notna(df_comp['Valor Anterior'])) & 
-        (pd.notna(df_comp['Valor Atual'])) &
-        (abs(df_comp['Valor Anterior'] - df_comp['Valor Atual']) > 1e-6)
-    ].copy()
+    df_divergencias = df_comp[(pd.notna(df_comp['Valor Anterior'])) & (pd.notna(df_comp['Valor Atual'])) & (abs(df_comp['Valor Anterior'] - df_comp['Valor Atual']) > 1e-6)].copy()
     df_divergencias['Diferença'] = df_divergencias['Valor Atual'] - df_divergencias['Valor Anterior']
 
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
@@ -279,26 +268,20 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
     
     resumo = {
-        "Lotes Mês Anterior": len(lotes_ant),
-        "Lotes Mês Atual": len(lotes_atu),
-        "Lotes Adicionados": len(df_adicionados),
-        "Lotes Removidos": len(df_removidos),
+        "Lotes Mês Anterior": len(lotes_ant), "Lotes Mês Atual": len(lotes_atu),
+        "Lotes Adicionados": len(df_adicionados), "Lotes Removidos": len(df_removidos),
         "Parcelas com Valor Alterado": len(df_divergencias)
     }
     df_resumo = pd.DataFrame([resumo])
-
     return df_resumo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
 
 # ==== Funções de Formatação do Excel ====
-
 def formatar_excel(output_stream, dfs: dict):
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
         for sheet_name, df in dfs.items():
             if not df.empty:
                 df.to_excel(writer, index=False, sheet_name=sheet_name)
-
         number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
-        
         for sheet_name in writer.sheets:
             worksheet = writer.sheets[sheet_name]
             for column_cells in worksheet.columns:
@@ -314,7 +297,6 @@ def formatar_excel(output_stream, dfs: dict):
     return output_stream
 
 # --- Início da Aplicação Web Flask ---
-
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -326,9 +308,7 @@ def index():
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'pdf_file' not in request.files or request.files['pdf_file'].filename == '':
-        return render_template('error.html', 
-                               error_title="Nenhum arquivo enviado", 
-                               error_message="Você precisa selecionar um arquivo PDF para fazer a análise."), 400
+        return "Nenhum arquivo enviado.", 400
     
     file = request.files['pdf_file']
     modo_separacao = request.form.get('modo_separacao', 'boleto')
@@ -338,19 +318,12 @@ def upload_file():
         if modo_separacao == 'boleto':
             emp_fixo = detectar_emp_por_nome_arquivo(file.filename)
             if not emp_fixo:
-                # <<NOVA ALTERAÇÃO>>: Renderiza o template de erro em vez de retornar HTML simples
-                error_msg = ("Para o modo 'Boleto', o nome do arquivo precisa terminar com um código de empreendimento (ex: 'Extrato_IATE.pdf'). "
-                             "Você pode ter selecionado o modo de análise errado para este tipo de arquivo.")
-                return render_template('error.html', 
-                                       error_title="Empreendimento não identificado", 
-                                       error_message=error_msg), 400
+                return f"<h1>Erro: Empreendimento não identificado.</h1><p>Para o modo 'Boleto', o nome do arquivo precisa terminar com um dos códigos (ex: 'Extrato_IATE.pdf').</p>", 400
 
         pdf_stream = file.read()
         texto_pdf = extrair_texto_pdf(pdf_stream)
         if not texto_pdf:
-            return render_template('error.html', 
-                                   error_title="Erro ao ler o PDF", 
-                                   error_message="Não foi possível extrair o texto do arquivo enviado. Ele pode estar corrompido ou ser uma imagem."), 500
+            return "Não foi possível extrair texto do PDF. O arquivo pode estar corrompido ou ser uma imagem.", 500
 
         df_todas, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
         
@@ -379,9 +352,7 @@ def upload_file():
     
     except Exception as e:
         traceback.print_exc()
-        return render_template('error.html', 
-                               error_title="Erro inesperado no processamento", 
-                               error_message=f"Ocorreu um erro grave durante a análise do arquivo. Detalhes: {e}"), 500
+        return f"Ocorreu um erro inesperado durante o processamento: {e}", 500
 
 @app.route('/compare', methods=['POST'])
 def compare_files():
@@ -442,14 +413,11 @@ def compare_files():
     except Exception as e:
         traceback.print_exc()
         return f"Ocorreu um erro inesperado durante a comparação: {e}", 500
-  
 
 @app.route('/download/<filename>')
 def download_file(filename):
     path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     return send_file(path, as_attachment=True)
 
-
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
-
