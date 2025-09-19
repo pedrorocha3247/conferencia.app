@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocorreu um Erro</title>
+    <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
+    <style>
+        .container {
+            max-width: 600px;
+            margin-top: 50px;
+        }
+        .company-logo {
+            display: block;
+            margin: 0 auto 30px auto;
+            max-height: 80px;
+            width: auto;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div>
+            <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logótipo da Empresa" class="company-logo">
+        </div>
+
+        <div class="card border-danger mb-3">
+            <div class="card-header text-white bg-danger">
+                <h4 class="mb-0">Ocorreu um Erro</h4>
+            </div>
+            <div class="card-body">
+                <h5 class="card-title">{{ error_title }}</h5>
+                <p class="card-text">{{ error_message }}</p>
+                <hr>
+                <a href="/" class="btn btn-primary">Tentar Novamente</a>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
