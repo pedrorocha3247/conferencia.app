@@ -242,8 +242,11 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
     df_cov = pd.DataFrame(linhas_cov)
     df_div = pd.DataFrame(linhas_div)
     if not df_todas.empty:
+        # <<NOVA ALTERAÇÃO>>: Adicionada regra para remover linhas que começam com "Total Banco"
         parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
         df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+        df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
+    
     return df_todas, df_cov, df_div
 
 def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_boleto):
@@ -262,17 +265,26 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
     df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna() & pd.notna(df_comp['Valor Anterior'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
     parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+    
     df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+    df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
+
     df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+    df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
+
     df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+    df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
+    
     resumo = {
-        "Lotes Mês Anterior": len(lotes_ant), "Lotes Mês Atual": len(lotes_atu),
-        "Lotes Adicionados": len(df_adicionados), "Lotes Removidos": len(df_removidos),
+        "Lotes Mês Anterior": len(lotes_ant),
+        "Lotes Mês Atual": len(lotes_atu),
+        "Lotes Adicionados": len(df_adicionados),
+        "Lotes Removidos": len(df_removidos),
         "Parcelas com Valor Alterado": len(df_divergencias)
     }
     df_resumo = pd.DataFrame([resumo])
-    return df_resumo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
 
+    return df_resumo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
 # ==== Funções de Formatação do Excel ====
 def formatar_excel(output_stream, dfs: dict):
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
@@ -455,4 +467,5 @@ def download_file(filename):
     return send_file(path, as_attachment=True)
 
 if __name__ == '__main__':
+
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
