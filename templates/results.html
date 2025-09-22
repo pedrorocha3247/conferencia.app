@@ -9,9 +9,8 @@
 <style>
   body { padding-bottom: 50px; }
   .card { border: none; }
-  .card-header { font-weight: bold; }
   .header-logo { max-height: 50px; width: auto; }
-  .dataTables_wrapper .form-control { background-color: #4e5d6c; color: #fff; border-color: #6c757d; }
+  .summary-item strong { text-transform: uppercase; }
 </style>
 </head>
 <body>
@@ -20,67 +19,57 @@
         <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logótipo da Empresa" class="header-logo">
         <a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
     </div>
-    <div class="card border-primary mb-4">
-        <div class="card-body summary-card">
+    <div class="card mb-4">
+        <div class="card-body">
             <h5 class="card-title mb-3">Resumo da Análise</h5>
             <div class="row text-center">
-                <div class="col-md-3 summary-item border-end border-secondary">
-                    <strong class="text-uppercase">Modo de Análise</strong>
-                    <div><span class="badge bg-primary fs-6 mt-1">{{ modo_usado.replace('_', '/').title() }}</span></div>
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Modo de Análise</strong>
+                    <div><span class="badge bg-primary fs-6 mt-1">__MODO_USADO__</span></div>
                 </div>
-                <div class="col-md-3 summary-item border-end border-secondary">
-                    <strong class="text-uppercase">Total de Lotes Processados</strong>
-                    <div><span class="badge bg-secondary fs-6 mt-1">{{ total_lotes }}</span></div>
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Total de Lotes Processados</strong>
+                    <div><span class="badge bg-secondary fs-6 mt-1">__TOTAL_LOTES__</span></div>
                 </div>
-                <div class="col-md-3 summary-item border-end border-secondary">
-                    <strong class="text-uppercase">Total de Divergências</strong>
-                    <div><span class="badge bg-danger fs-6 mt-1">{{ total_divergencias }}</span></div>
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Total de Divergências</strong>
+                    <div><span class="badge bg-danger fs-6 mt-1">__TOTAL_DIVERGENCIAS__</span></div>
                 </div>
-                {% if nao_classificados > 0 %}
-                <div class="col-md-3 summary-item">
-                    <strong class="text-uppercase">Lotes Não Classificados</strong>
-                    <div><span class="badge bg-warning fs-6 mt-1">{{ nao_classificados }}</span></div>
+                <div class="col-md summary-item">
+                    <strong>Não Classificados</strong>
+                    <div><span class="badge bg-warning fs-6 mt-1">__NAO_CLASSIFICADOS__</span></div>
                 </div>
-                {% endif %}
             </div>
             <hr>
-            <a href="{{ download_url }}" class="btn btn-success">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-excel-fill" viewBox="0 0 16 16"><path d="M9.293 0H4a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V4.707A1 1 0 0 0 13.707 4L10 .293A1 1 0 0 0 9.293 0M9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1M5.884 6.884 8 9.219l2.116-2.54a.5.5 0 1 1 .768.641L8.651 10l2.233 2.68a.5.5 0 0 1-.768.64L8 10.781l-2.116 2.54a.5.5 0 0 1-.768-.641L7.349 10 5.116 7.32a.5.5 0 1 1 .768-.641z"/></svg>
-                Baixar Relatório Completo (.xlsx)
-            </a>
+            <a href="__DOWNLOAD_URL__" class="btn btn-success">Baixar Relatório Completo (.xlsx)</a>
         </div>
     </div>
-    <div class="card border-info">
+    <div class="card">
         <div class="card-header"><h4>Tabela de Divergências</h4></div>
         <div class="card-body">
-            {% if total_divergencias > 0 %}
-                <table id="tabela-divergencias" class="table table-striped" style="width:100%"></table>
-            {% else %}
-                <p class="text-center p-3">Nenhuma divergência encontrada nos arquivos analisados.</p>
-            {% endif %}
+            <table id="tabela-divergencias" class="table table-striped" style="width:100%"></table>
         </div>
     </div>
 </div>
 <script src="https://code.jquery.com/jquery-3.7.0.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
 <script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
 <script>
 $(document).ready(function() {
     const ptBrLang = { "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json" };
     function toTitleCase(str) {
-        return str.replace(/_/g, ' ').replace(/\w\S*/g, function(txt){
-            return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
-        });
+        return str.replace(/_/g, ' ').replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
     }
-    const divergenciasData = {{ divergencias_json|safe }};
-    if (divergenciasData && divergenciasData.data.length > 0) {
-        const divergenciasColumns = divergenciasData.columns.map(col => ({ title: toTitleCase(col) }));
+    const divergenciasData = "__DIVERGENCIAS_JSON__";
+    if (divergenciasData && divergenciasData.data && divergenciasData.data.length > 0) {
+        const columns = divergenciasData.columns.map(col => ({ title: toTitleCase(col) }));
         $('#tabela-divergencias').DataTable({
             data: divergenciasData.data,
-            columns: divergenciasColumns,
+            columns: columns,
             language: ptBrLang
         });
+    } else {
+        $('#tabela-divergencias').parent().html('<p class="text-center p-3">Nenhuma divergência encontrada.</p>');
     }
 });
 </script>
