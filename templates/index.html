@@ -4,81 +4,45 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Validador de Remessas</title>
-    
     <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
-    
     <style>
-        body {
-            background-color: #222;
-        }
-        .container {
-            max-width: 700px;
-            margin-top: 50px;
-            margin-bottom: 50px;
-        }
-        .company-logo {
-            display: block;
-            margin: 0 auto 30px auto;
-            max-height: 80px;
-            width: auto;
-        }
-        .form-check-label small {
-            line-height: 1.2;
-            display: block;
-        }
-        .tab-content {
-            border: 1px solid #4e5d6c;
-            border-top: none;
-            padding: 2rem;
-            border-radius: 0 0 .375rem .375rem;
-            background-color: #2a3137;
-        }
-        .nav-pills .nav-link {
-            font-weight: bold;
-            background-color: #37404a; 
-            color: #adb5bd; 
-            border: 1px solid transparent;
-        }
-        .nav-pills .nav-link.active {
-            background-color: var(--bs-primary);
-            color: #fff;
-        }
-        .nav-pills {
-            --bs-nav-pills-border-radius: .375rem .375rem 0 0;
-        }
+        body { background-color: #222; }
+        .container { max-width: 700px; margin-top: 50px; margin-bottom: 50px; }
+        .company-logo { display: block; margin: 0 auto 30px auto; max-height: 80px; width: auto; }
+        .tab-content { border: 1px solid #4e5d6c; border-top: none; padding: 2rem; border-radius: 0 0 .375rem .375rem; background-color: #2a3137; }
+        .nav-pills .nav-link.active { background-color: var(--bs-primary); color: #fff; }
+        .company-selector { position: absolute; top: 1rem; right: 1rem; z-index: 1050; }
 
-        /* <<NOVO>>: Seletor de empresas no canto */
-        .company-selector {
-            position: absolute;
-            top: 1rem;
-            right: 1rem;
-        }
+        /* <<NOVO>>: Estilos da Tela de Carregamento (Splash Screen) */
+        #splash-screen { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: #222; display: flex; justify-content: center; align-items: center; z-index: 9999; opacity: 1; transition: opacity 0.8s ease-out; }
+        #splash-screen .company-logo { max-width: 350px; width: 80%; animation: pulse 2s infinite ease-in-out; }
+        @keyframes pulse { 0% { transform: scale(1); } 50% { transform: scale(1.08); } 100% { transform: scale(1); } }
 
-        /* <<NOVO>>: Tema de cores para Pick Money (Verde) */
-        body.theme-pickmoney {
-            --bs-primary: #28a745; /* Cor primária verde */
-            --bs-primary-rgb: 40, 167, 69;
-            --bs-primary-text-emphasis: #145624;
-            --bs-primary-bg-subtle: #0d3615;
-            --bs-primary-border-subtle: #1c6c2d;
-        }
-
+        /* <<ATUALIZADO>>: Tema de cores para Pick Money (Verde) */
+        body.theme-pickmoney { --bs-primary: #28a745; --bs-primary-rgb: 40, 167, 69; }
         body.theme-pickmoney .btn-primary {
-            --bs-btn-bg: #28a745;
-            --bs-btn-border-color: #28a745;
+            --bs-btn-bg: var(--bs-primary);
+            --bs-btn-border-color: var(--bs-primary);
             --bs-btn-hover-bg: #228c3a;
             --bs-btn-hover-border-color: #208236;
             --bs-btn-active-bg: #208236;
             --bs-btn-active-border-color: #1d7832;
         }
+        body.theme-pickmoney .btn-secondary {
+             --bs-btn-color: #fff;
+             --bs-btn-bg: #5a6268;
+             --bs-btn-border-color: #5a6268;
+        }
     </style>
 </head>
 <body>
+    <div id="splash-screen">
+        <img src="" alt="Logótipo da Empresa" class="company-logo">
+    </div>
+
     <div class="company-selector">
         <div class="dropdown">
-            <button class="btn btn-secondary dropdown-toggle" type="button" id="companyDropdown" data-bs-toggle="dropdown" aria-expanded="false">
-                Empresas
-            </button>
+            <button class="btn btn-secondary dropdown-toggle" type="button" id="companyDropdown" data-bs-toggle="dropdown" aria-expanded="false">Empresas</button>
             <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="companyDropdown">
                 <li><a class="dropdown-item company-choice" href="#" data-company="momentum">Momentum</a></li>
                 <li><a class="dropdown-item company-choice" href="#" data-company="pickmoney">Pick Money</a></li>
@@ -86,57 +50,25 @@
         </div>
     </div>
 
-    <div class="container">
-
-        <div>
-            <img src="" alt="Logótipo da Empresa" class="company-logo">
-        </div>
-
+    <div class="container" id="main-content" style="display: none;">
+        <div><img src="" alt="Logótipo da Empresa" class="company-logo"></div>
         <ul class="nav nav-pills nav-fill" id="myTab" role="tablist">
-            <li class="nav-item" role="presentation" id="validacao-tab-li">
-                <button class="nav-link" id="validacao-tab" data-bs-toggle="tab" data-bs-target="#validacao-tab-pane" type="button" role="tab">Validação Simples</button>
-            </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="comparativo-tab" data-bs-toggle="tab" data-bs-target="#comparativo-tab-pane" type="button" role="tab">Comparação</button>
-            </li>
+            <li class="nav-item" role="presentation" id="validacao-tab-li"><button class="nav-link" id="validacao-tab" data-bs-toggle="tab" data-bs-target="#validacao-tab-pane" type="button" role="tab">Validação Simples</button></li>
+            <li class="nav-item" role="presentation"><button class="nav-link" id="comparativo-tab" data-bs-toggle="tab" data-bs-target="#comparativo-tab-pane" type="button" role="tab">Comparação</button></li>
         </ul>
-
         <div class="tab-content" id="myTabContent">
-            <div class="tab-pane fade" id="validacao-tab-pane" role="tabpanel">
-                <h4 class="mb-3 text-center">Validador de Remessas</h4>
-                <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">1. Escolha o Modo de Análise:</label>
-                        <div class="form-check mb-2"><input class="form-check-input" type="radio" name="modo_separacao" id="modo_boleto" value="boleto" checked><label class="form-check-label" for="modo_boleto"><strong>Boleto</strong> <br><small class="text-muted">Analisa os arquivos referente às remessas de Boleto.</small></label></div>
-                        <div class="form-check"><input class="form-check-input" type="radio" name="modo_separacao" id="modo_debito_credito" value="debito_credito"><label class="form-check-label" for="modo_debito_credito"><strong>Débito/Crédito</strong> <br><small class="text-muted">Analisa os arquivos referente às remessas de Débito e Crédito.</small></label></div>
-                    </div>
-                    <div class="mb-3 mt-3"><label for="pdf_file" class="form-label fw-bold">2. Envie o Arquivo PDF:</label><input type="file" class="form-control" name="pdf_file" id="pdf_file" accept=".pdf" required></div>
-                    <div class="d-grid mt-3"><button id="submit-button" type="submit" class="btn btn-primary btn-lg"><span class="spinner-border spinner-border-sm d-none"></span><span class="button-text">Validar Arquivo</span></button></div>
-                </form>
-            </div>
-            <div class="tab-pane fade" id="comparativo-tab-pane" role="tabpanel">
-                <h4 class="mb-3 text-center">Comparativo Entre Meses</h4>
-                <form id="compare-form" action="/compare" method="post" enctype="multipart/form-data">
-                    <div class="mb-3">
-                        <label class="form-label fw-bold">1. Escolha o Modo de Análise:</label>
-                        <div class="form-check mb-2"><input class="form-check-input" type="radio" name="modo_separacao_comp" id="modo_boleto_comp" value="boleto" checked><label class="form-check-label" for="modo_boleto_comp"><strong>Boleto</strong></label></div>
-                        <div class="form-check"><input class="form-check-input" type="radio" name="modo_separacao_comp" id="modo_debito_credito_comp" value="debito_credito"><label class="form-check-label" for="modo_debito_credito_comp"><strong>Débito/Crédito</strong></label></div>
-                    </div>
-                    <div class="mb-3 mt-3"><label for="pdf_mes_anterior" class="form-label fw-bold">2. Envie o Arquivo do Mês Anterior:</label><input type="file" class="form-control" name="pdf_mes_anterior" id="pdf_mes_anterior" accept=".pdf" required></div>
-                    <div class="mb-3 mt-3"><label for="pdf_mes_atual" class="form-label fw-bold">3. Envie o Arquivo do Mês Atual:</label><input type="file" class="form-control" name="pdf_mes_atual" id="pdf_mes_atual" accept=".pdf" required></div>
-                    <div class="d-grid mt-3 mb-2"><button id="compare-button" type="submit" class="btn btn-primary btn-lg"><span class="spinner-border spinner-border-sm d-none"></span><span class="button-text">Comparar Arquivos</span></button></div>
-                </form>
-            </div>
+            <div class="tab-pane fade" id="validacao-tab-pane" role="tabpanel"></div>
+            <div class="tab-pane fade" id="comparativo-tab-pane" role="tabpanel"></div>
         </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        // <<ATUALIZADO>>: Lógica completa com Tema e Splash Screen
         document.addEventListener('DOMContentLoaded', function() {
             const logos = {
                 momentum: "https://i.postimg.cc/k52qrH0Z/Imagem1.png",
-                // !! ATENÇÃO !!: Substitua este link pelo logo correto da Pick Money
-                pickmoney: "https://assets.stickpng.com/images/585e4d13cb11b227491c339b.png" 
+                pickmoney: "https://i.postimg.cc/k52qrH0Z/Imagem1.png" // !! ATENÇÃO !!: Substitua pelo logo da Pick Money
             };
 
             const body = document.body;
@@ -144,47 +76,43 @@
             const validacaoTabLi = document.getElementById('validacao-tab-li');
             const validacaoTab = new bootstrap.Tab(document.getElementById('validacao-tab'));
             const comparativoTab = new bootstrap.Tab(document.getElementById('comparativo-tab'));
+            const splashScreen = document.getElementById('splash-screen');
+            const mainContent = document.getElementById('main-content');
 
             function applyCompanyTheme(company) {
-                // Salva a escolha no navegador
                 localStorage.setItem('selectedCompany', company);
+                logoElements.forEach(logo => { logo.src = logos[company]; });
 
                 if (company === 'pickmoney') {
-                    // Aplica o tema verde
                     body.classList.add('theme-pickmoney');
-                    // Esconde a aba de validação
                     validacaoTabLi.style.display = 'none';
-                    // Ativa a aba de comparação
                     comparativoTab.show();
-                } else { // Padrão é Momentum
-                    // Remove o tema verde (volta para o azul padrão)
+                } else {
                     body.classList.remove('theme-pickmoney');
-                    // Mostra a aba de validação
                     validacaoTabLi.style.display = 'block';
-                    // Ativa a aba de validação
                     validacaoTab.show();
                 }
-
-                // Atualiza todos os logos na página
-                logoElements.forEach(logo => {
-                    logo.src = logos[company];
-                });
             }
 
-            // Adiciona o evento de clique para os botões do dropdown
             document.querySelectorAll('.company-choice').forEach(choice => {
                 choice.addEventListener('click', function(e) {
                     e.preventDefault();
-                    const selectedCompany = this.getAttribute('data-company');
-                    applyCompanyTheme(selectedCompany);
+                    applyCompanyTheme(this.getAttribute('data-company'));
                 });
             });
 
-            // No carregamento da página, aplica o tema salvo ou o padrão
+            // Lógica da Splash Screen
             const savedCompany = localStorage.getItem('selectedCompany') || 'momentum';
-            applyCompanyTheme(savedCompany);
-        });
+            applyCompanyTheme(savedCompany); // Aplica o tema antes de tudo
 
+            setTimeout(() => {
+                splashScreen.style.opacity = '0';
+                setTimeout(() => {
+                    splashScreen.style.display = 'none';
+                    mainContent.style.display = 'block';
+                }, 600);
+            }, 2000); // Duração da splash screen
+        });
     </script>
 </body>
 </html>
