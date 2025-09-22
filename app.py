@@ -19,22 +19,18 @@ HEADERS = (
     "Vencimento", "Lançamentos", "Programação", "Carta", "DÉBITOS", "ENCARGOS",
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
-
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.([A-Z0-9\u0399\u039A]{2})\.\d{1,4})\b")
-
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
     r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*"
     r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/\d]+?)\s+([\d.,]+)"
     r"(?=\s{2,}|\t|$)", re.MULTILINE
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
-
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'RSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
-
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -49,7 +45,6 @@ EMP_MAP = {
     "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "RSCV": {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00},
 }
-
 BASE_FIXOS = {
     "Taxa de Conservação": [434.11],
     "Contrib. Social SLIM": [103.00, 309.00],
@@ -72,7 +67,6 @@ def manual_render_template(template_name, status_code=200, **kwargs):
         
         for key, value in kwargs.items():
             placeholder = f"__{key.upper()}__"
-            # Lida com o caso especial de dados JSON injetados no <script>
             if isinstance(value, str) and ('{' in value and '}' in value):
                  html_content = html_content.replace(f'"{placeholder}"', value)
             else:
@@ -87,7 +81,6 @@ def manual_render_template(template_name, status_code=200, **kwargs):
 
 
 # ==== Funções de Normalização e Extração ====
-
 def normalizar_texto(s: str) -> str:
     s = s.translate(DASHES).replace("\u00A0", " ")
     s = "".join(ch for ch in s if ch not in "\u200B\u200C\u200D\uFEFF")
@@ -111,7 +104,6 @@ def to_float(s: str):
         return None
 
 # ==== Funções de Lógica e Classificação ====
-
 def fixos_do_emp(emp: str):
     if emp not in EMP_MAP:
         return BASE_FIXOS
@@ -138,7 +130,6 @@ def detectar_emp_por_lote(lote: str):
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
 # ==== Funções de Extração de Dados ====
-
 def limpar_rotulo(lbl: str) -> str:
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
@@ -328,7 +319,6 @@ def upload_file():
                 return manual_render_template('error.html', status_code=400,
                     error_title="Empreendimento não identificado", error_message=error_msg)
         
-        # <<NOVA ALTERAÇÃO>>: Verifica se um arquivo de Boleto foi enviado no modo Débito/Crédito
         elif modo_separacao == 'debito_credito':
             if detectar_emp_por_nome_arquivo(file.filename):
                 error_msg = ("Este arquivo é do tipo 'Boleto', mas o modo 'Débito/Crédito' foi selecionado. "
@@ -375,7 +365,7 @@ def upload_file():
         return manual_render_template('error.html', status_code=500,
             error_title="Erro inesperado no processamento", 
             error_message=f"Ocorreu um erro grave durante a análise do arquivo. Detalhes: {e}")
-        
+
 @app.route('/compare', methods=['POST'])
 def compare_files():
     if 'pdf_mes_anterior' not in request.files or 'pdf_mes_atual' not in request.files:
@@ -406,6 +396,13 @@ def compare_files():
                     error_title="Empreendimentos diferentes",
                     error_message="Para o modo 'Boleto', os arquivos devem ser do mesmo empreendimento.")
             emp_fixo_boleto = emp_ant
+        elif modo_separacao == 'debito_credito':
+            if detectar_emp_por_nome_arquivo(file_ant.filename) or detectar_emp_por_nome_arquivo(file_atu.filename):
+                error_msg = ("Um dos arquivos parece ser do tipo 'Boleto', mas o modo 'Débito/Crédito' foi selecionado. "
+                             "Por favor, volte e selecione o modo de análise correto.")
+                return manual_render_template('error.html', status_code=400,
+                                              error_title="Modo de Análise Incorreto",
+                                              error_message=error_msg)
 
         texto_ant = extrair_texto_pdf(file_ant.read())
         texto_atu = extrair_texto_pdf(file_atu.read())
@@ -459,6 +456,3 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
-
-
-
