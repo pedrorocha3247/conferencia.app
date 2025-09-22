@@ -331,8 +331,8 @@ def upload_file():
         # <<NOVA ALTERAÇÃO>>: Verifica se um arquivo de Boleto foi enviado no modo Débito/Crédito
         elif modo_separacao == 'debito_credito':
             if detectar_emp_por_nome_arquivo(file.filename):
-                error_msg = ("Este arquivo parece ser do tipo 'Boleto', mas o modo 'Débito/Crédito' foi selecionado. "
-                             "Por favor, volte e use o modo de análise correto para este arquivo.")
+                error_msg = ("Este arquivo é do tipo 'Boleto', mas o modo 'Débito/Crédito' foi selecionado. "
+                             "Por favor, volte e selecione o modo de análise correto para este arquivo.")
                 return manual_render_template('error.html', status_code=400,
                                               error_title="Modo de Análise Incorreto",
                                               error_message=error_msg)
@@ -459,5 +459,6 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
 
 
