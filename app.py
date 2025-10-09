@@ -19,22 +19,18 @@ HEADERS = (
     "Vencimento", "Lançamentos", "Programação", "Carta", "DÉBITOS", "ENCARGOS",
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
-
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.([A-Z0-9\u0399\u039A]{2})\.\d{1,4})\b")
-
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
     r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*"
     r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/\d]+?)\s+([\d.,]+)"
     r"(?=\s{2,}|\t|$)", re.MULTILINE
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
-
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'RSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
-
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -49,7 +45,6 @@ EMP_MAP = {
     "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "RSCV": {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00},
 }
-
 BASE_FIXOS = {
     "Taxa de Conservação": [434.11],
     "Contrib. Social SLIM": [103.00, 309.00],
@@ -256,6 +251,10 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
     df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
 
+    # <<NOVA ALTERAÇÃO>>: Calcula o total do mês atual também
+    df_totais_atu = df_todas_atu_raw[df_todas_atu_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
+    df_totais_atu = df_totais_atu[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Atual'})
+
     parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
     df_todas_ant = df_todas_ant_raw[~df_todas_ant_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
     df_todas_atu = df_todas_atu_raw[~df_todas_atu_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
@@ -270,9 +269,12 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     lotes_ant = df_todas_ant[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_atu = df_todas_atu[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='outer', indicator=True)
-    df_adicionados = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento', 'Lote', 'Cliente']]
+    
+    df_adicionados_base = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento', 'Lote', 'Cliente']]
     df_removidos_base = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento', 'Lote', 'Cliente']]
     
+    # <<NOVA ALTERAÇÃO>>: Junta os totais aos clientes adicionados e removidos
+    df_adicionados = pd.merge(df_adicionados_base, df_totais_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='left')
     df_removidos = pd.merge(df_removidos_base, df_totais_ant, on=['Empreendimento', 'Lote', 'Cliente'], how='left')
 
     df_divergencias = df_comp[(pd.notna(df_comp['Valor Anterior'])) & (pd.notna(df_comp['Valor Atual'])) & (abs(df_comp['Valor Anterior'] - df_comp['Valor Atual']) > 1e-6)].copy()
