@@ -8,33 +8,29 @@ import io
 import fitz  # PyMuPDF
 import pandas as pd
 from collections import OrderedDict
-from flask import Flask, render_template, request, send_file, url_for
+from flask import Flask, request, send_file, url_for, make_response
 from openpyxl.styles import NamedStyle
 import traceback
 
-# ==== Constantes e Mapeamentos (Hardcoded no arquivo) ====
+# ==== Constantes e Mapeamentos ====
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
 HEADERS = (
     "Remessa para Conferência", "Página", "Banco", "IMOBILIARIOS", "Débitos do Mês",
     "Vencimento", "Lançamentos", "Programação", "Carta", "DÉBITOS", "ENCARGOS",
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
-
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.([A-Z0-9\u0399\u039A]{2})\.\d{1,4})\b")
-
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
     r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*"
     r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/\d]+?)\s+([\d.,]+)"
     r"(?=\s{2,}|\t|$)", re.MULTILINE
 )
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
-
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'RSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
-
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -49,7 +45,6 @@ EMP_MAP = {
     "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "RSCV": {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00},
 }
-
 BASE_FIXOS = {
     "Taxa de Conservação": [434.11],
     "Contrib. Social SLIM": [103.00, 309.00],
@@ -58,8 +53,34 @@ BASE_FIXOS = {
     "Contribuição ABRASMA - Ouro": [60.00],
 }
 
-# ==== Funções de Normalização e Extração ====
+# --- Início da Aplicação Web Flask ---
+app = Flask(__name__)
+app.config['UPLOAD_FOLDER'] = 'uploads'
+os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
+
+def manual_render_template(template_name, status_code=200, **kwargs):
+    template_path = os.path.join(app.root_path, 'templates', template_name)
+    try:
+        with open(template_path, 'r', encoding='utf-8') as f:
+            html_content = f.read()
+        
+        for key, value in kwargs.items():
+            placeholder = f"__{key.upper()}__"
+            if isinstance(value, str) and ('{' in value and '}' in value):
+                 html_content = html_content.replace(f'"{placeholder}"', value)
+            else:
+                html_content = html_content.replace(placeholder, str(value))
+
+        response = make_response(html_content)
+        response.headers['Content-Type'] = 'text/html'
+        return response, status_code
+    except Exception as e:
+        print(f"ERRO CRÍTICO AO RENDERIZAR MANUALMENTE '{template_name}': {e}")
+        return f"<h1>Erro 500: Falha Crítica ao Carregar Template</h1><p>O arquivo {template_name} não pôde ser lido. Erro: {e}</p>", 500
+
+
+# ==== Funções de Normalização e Extração ====
 def normalizar_texto(s: str) -> str:
     s = s.translate(DASHES).replace("\u00A0", " ")
     s = "".join(ch for ch in s if ch not in "\u200B\u200C\u200D\uFEFF")
@@ -83,7 +104,6 @@ def to_float(s: str):
         return None
 
 # ==== Funções de Lógica e Classificação ====
-
 def fixos_do_emp(emp: str):
     if emp not in EMP_MAP:
         return BASE_FIXOS
@@ -110,7 +130,6 @@ def detectar_emp_por_lote(lote: str):
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
 # ==== Funções de Extração de Dados ====
-
 def limpar_rotulo(lbl: str) -> str:
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
@@ -186,7 +205,6 @@ def extrair_parcelas(bloco: str):
     return itens
 
 # ==== Funções de Processamento ====
-
 def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto: str = None):
     blocos = fatiar_blocos(texto_pdf)
     if not blocos: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -223,55 +241,50 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
     df_todas = pd.DataFrame(linhas_todas)
     df_cov = pd.DataFrame(linhas_cov)
     df_div = pd.DataFrame(linhas_div)
-
+    if not df_todas.empty:
+        # <<NOVA ALTERAÇÃO>>: Adicionada regra para remover linhas que começam com "Total Banco"
+        parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+        df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+        df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
+    
     return df_todas, df_cov, df_div
 
 def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_boleto):
-    # <<NOVA ALTERAÇÃO INÍCIO>>: Lógica movida para calcular totais antes de filtrar
-    df_todas_ant_raw, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
-    df_todas_atu_raw, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
-
-    df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
-    df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
-
-    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
-    df_todas_ant = df_todas_ant_raw[~df_todas_ant_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
-    df_todas_atu = df_todas_atu_raw[~df_todas_atu_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
-    
-    df_todas_ant = df_todas_ant[~df_todas_ant['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
-    df_todas_atu = df_todas_atu[~df_todas_atu['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
-    # <<NOVA ALTERAÇÃO FIM>>
-
+    df_todas_ant, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
+    df_todas_atu, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
     df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
     df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
-
     df_comp = pd.merge(df_todas_ant, df_todas_atu, on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'], how='outer')
-
     lotes_ant = df_todas_ant[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_atu = df_todas_atu[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
-    
     lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='outer', indicator=True)
-    
     df_adicionados = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento', 'Lote', 'Cliente']]
-    df_removidos_base = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento', 'Lote', 'Cliente']]
-
-    # <<NOVA ALTERAÇÃO>>: Junta os totais calculados aos clientes removidos
-    df_removidos = pd.merge(df_removidos_base, df_totais_ant, on=['Empreendimento', 'Lote', 'Cliente'], how='left')
-
+    df_removidos = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento', 'Lote', 'Cliente']]
     df_divergencias = df_comp[(pd.notna(df_comp['Valor Anterior'])) & (pd.notna(df_comp['Valor Atual'])) & (abs(df_comp['Valor Anterior'] - df_comp['Valor Atual']) > 1e-6)].copy()
     df_divergencias['Diferença'] = df_divergencias['Valor Atual'] - df_divergencias['Valor Anterior']
-
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
     df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna() & pd.notna(df_comp['Valor Anterior'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
+    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+    
+    df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+    df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
+
+    df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+    df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
+
+    df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+    df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
     
     resumo = {
-        "Lotes Mês Anterior": len(lotes_ant), "Lotes Mês Atual": len(lotes_atu),
-        "Lotes Adicionados": len(df_adicionados), "Lotes Removidos": len(df_removidos),
+        "Lotes Mês Anterior": len(lotes_ant),
+        "Lotes Mês Atual": len(lotes_atu),
+        "Lotes Adicionados": len(df_adicionados),
+        "Lotes Removidos": len(df_removidos),
         "Parcelas com Valor Alterado": len(df_divergencias)
     }
     df_resumo = pd.DataFrame([resumo])
-    return df_resumo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
 
+    return df_resumo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
 # ==== Funções de Formatação do Excel ====
 def formatar_excel(output_stream, dfs: dict):
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
@@ -296,12 +309,14 @@ def formatar_excel(output_stream, dfs: dict):
 # ==== Rotas da Aplicação ====
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return manual_render_template('index.html')
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
     if 'pdf_file' not in request.files or request.files['pdf_file'].filename == '':
-        return "Nenhum arquivo enviado.", 400
+        return manual_render_template('error.html', status_code=400,
+            error_title="Nenhum arquivo enviado", 
+            error_message="Você precisa selecionar um arquivo PDF para fazer a análise.")
     
     file = request.files['pdf_file']
     modo_separacao = request.form.get('modo_separacao', 'boleto')
@@ -311,27 +326,30 @@ def upload_file():
         if modo_separacao == 'boleto':
             emp_fixo = detectar_emp_por_nome_arquivo(file.filename)
             if not emp_fixo:
-                return f"<h1>Erro: Empreendimento não identificado.</h1><p>Para o modo 'Boleto', o nome do arquivo precisa terminar com um dos códigos (ex: 'Extrato_IATE.pdf').</p>", 400
+                error_msg = ("Para o modo 'Boleto', o nome do arquivo precisa terminar com um código de empreendimento (ex: 'Extrato_IATE.pdf'). "
+                             "Você pode ter selecionado o modo de análise errado para este tipo de arquivo.")
+                return manual_render_template('error.html', status_code=400,
+                    error_title="Empreendimento não identificado", error_message=error_msg)
+        
+        elif modo_separacao == 'debito_credito':
+            if detectar_emp_por_nome_arquivo(file.filename):
+                error_msg = ("Este arquivo é do tipo 'Boleto', mas o modo 'Débito/Crédito' foi selecionado. "
+                             "Por favor, volte e selecione o modo de análise correto para este arquivo.")
+                return manual_render_template('error.html', status_code=400,
+                                              error_title="Modo de Análise Incorreto",
+                                              error_message=error_msg)
 
         pdf_stream = file.read()
         texto_pdf = extrair_texto_pdf(pdf_stream)
         if not texto_pdf:
-            return "Não foi possível extrair texto do PDF. O arquivo pode estar corrompido ou ser uma imagem.", 500
+            return manual_render_template('error.html', status_code=500,
+                error_title="Erro ao ler o PDF", 
+                error_message="Não foi possível extrair o texto do arquivo enviado. Ele pode estar corrompido ou ser uma imagem.")
 
         df_todas, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
         
-        # <<NOVA ALTERAÇÃO>>: Filtra os dados aqui para o relatório de validação simples
-        if not df_todas.empty:
-            parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
-            df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-            df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
-
         output = io.BytesIO()
-        dfs_to_excel = {
-            "Divergencias": df_div,
-            "Cobertura_Analise": df_cov,
-            "Todas_Parcelas_Extraidas": df_todas
-        }
+        dfs_to_excel = {"Divergencias": df_div, "Cobertura_Analise": df_cov, "Todas_Parcelas_Extraidas": df_todas}
         formatar_excel(output, dfs_to_excel)
         output.seek(0)
 
@@ -341,29 +359,40 @@ def upload_file():
         
         with open(report_path, 'wb') as f: f.write(output.getvalue())
 
-        return render_template('results.html',
-                               divergencias_json=df_div.to_json(orient='split', index=False) if not df_div.empty else 'null',
-                               total_lotes=len(df_cov),
-                               total_divergencias=len(df_div),
-                               nao_classificados=len(df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO']) if not df_cov.empty else 0,
-                               download_url=url_for('download_file', filename=report_filename),
-                               modo_usado=modo_separacao)
+        nao_classificados = 0
+        if not df_cov.empty and 'Empreendimento' in df_cov.columns:
+            nao_classificados = df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO'].shape[0]
+
+        return manual_render_template('results.html',
+            divergencias_json=df_div.to_json(orient='split', index=False) if not df_div.empty else 'null',
+            total_lotes=len(df_cov),
+            total_divergencias=len(df_div),
+            nao_classificados=nao_classificados,
+            download_url=url_for('download_file', filename=report_filename),
+            modo_usado=modo_separacao.replace('_', '/')
+        )
     
     except Exception as e:
         traceback.print_exc()
-        return f"Ocorreu um erro inesperado durante o processamento: {e}", 500
+        return manual_render_template('error.html', status_code=500,
+            error_title="Erro inesperado no processamento", 
+            error_message=f"Ocorreu um erro grave durante a análise do arquivo. Detalhes: {e}")
 
 @app.route('/compare', methods=['POST'])
 def compare_files():
     if 'pdf_mes_anterior' not in request.files or 'pdf_mes_atual' not in request.files:
-        return "Ambos os arquivos (mês anterior e atual) são necessários.", 400
+        return manual_render_template('error.html', status_code=400,
+            error_title="Arquivos faltando", 
+            error_message="Ambos os arquivos (mês anterior e atual) são necessários para a comparação.")
 
     file_ant = request.files['pdf_mes_anterior']
     file_atu = request.files['pdf_mes_atual']
     modo_separacao = request.form.get('modo_separacao_comp', 'boleto')
 
     if file_ant.filename == '' or file_atu.filename == '':
-        return "Selecione os dois arquivos para comparar.", 400
+        return manual_render_template('error.html', status_code=400,
+            error_title="Arquivos faltando", 
+            error_message="Selecione os dois arquivos para comparar.")
 
     try:
         emp_fixo_boleto = None
@@ -371,16 +400,29 @@ def compare_files():
             emp_ant = detectar_emp_por_nome_arquivo(file_ant.filename)
             emp_atu = detectar_emp_por_nome_arquivo(file_atu.filename)
             if not emp_ant or not emp_atu:
-                return "Modo Boleto: Empreendimento não identificado em um dos arquivos.", 400
+                return manual_render_template('error.html', status_code=400,
+                    error_title="Empreendimento não identificado",
+                    error_message="Para o modo 'Boleto', o nome de ambos os arquivos precisa terminar com um código de empreendimento.")
             if emp_ant != emp_atu:
-                return "Modo Boleto: Os arquivos devem ser do mesmo empreendimento.", 400
+                return manual_render_template('error.html', status_code=400,
+                    error_title="Empreendimentos diferentes",
+                    error_message="Para o modo 'Boleto', os arquivos devem ser do mesmo empreendimento.")
             emp_fixo_boleto = emp_ant
+        elif modo_separacao == 'debito_credito':
+            if detectar_emp_por_nome_arquivo(file_ant.filename) or detectar_emp_por_nome_arquivo(file_atu.filename):
+                error_msg = ("Um dos arquivos parece ser do tipo 'Boleto', mas o modo 'Débito/Crédito' foi selecionado. "
+                             "Por favor, volte e selecione o modo de análise correto.")
+                return manual_render_template('error.html', status_code=400,
+                                              error_title="Modo de Análise Incorreto",
+                                              error_message=error_msg)
 
         texto_ant = extrair_texto_pdf(file_ant.read())
         texto_atu = extrair_texto_pdf(file_atu.read())
 
         if not texto_ant or not texto_atu:
-            return "Não foi possível extrair texto de um dos PDFs.", 500
+            return manual_render_template('error.html', status_code=500,
+                error_title="Erro ao ler o PDF",
+                error_message="Não foi possível extrair texto de um dos PDFs. Ele pode estar corrompido ou ser uma imagem.")
 
         df_resumo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas = processar_comparativo(
             texto_ant, texto_atu, modo_separacao, emp_fixo_boleto
@@ -388,11 +430,8 @@ def compare_files():
 
         output = io.BytesIO()
         dfs_to_excel = {
-            "Resumo": df_resumo,
-            "Lotes Adicionados": df_adicionados,
-            "Lotes Removidos": df_removidos,
-            "Divergências de Valor": df_divergencias,
-            "Parcelas Novas por Lote": df_parc_novas,
+            "Resumo": df_resumo, "Lotes Adicionados": df_adicionados, "Lotes Removidos": df_removidos,
+            "Divergências de Valor": df_divergencias, "Parcelas Novas por Lote": df_parc_novas,
             "Parcelas Removidas por Lote": df_parc_removidas,
         }
         formatar_excel(output, dfs_to_excel)
@@ -402,16 +441,25 @@ def compare_files():
         report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
         with open(report_path, 'wb') as f: f.write(output.getvalue())
         
-        return render_template('compare_results.html',
-                               resumo=df_resumo.to_dict('records')[0],
-                               adicionados=df_adicionados.to_html(classes='table table-sm table-striped', index=False, border=0),
-                               removidos=df_removidos.to_html(classes='table table-sm table-striped', index=False, border=0),
-                               divergencias=df_divergencias.to_html(classes='table table-sm table-striped', index=False, border=0),
-                               download_url=url_for('download_file', filename=report_filename))
+        resumo_dict = df_resumo.to_dict('records')[0]
+
+        return manual_render_template('compare_results.html',
+            resumo_lotes_mes_anterior=resumo_dict.get('Lotes Mês Anterior', 0),
+            resumo_lotes_mes_atual=resumo_dict.get('Lotes Mês Atual', 0),
+            resumo_lotes_adicionados=resumo_dict.get('Lotes Adicionados', 0),
+            resumo_lotes_removidos=resumo_dict.get('Lotes Removidos', 0),
+            resumo_parcelas_com_valor_alterado=resumo_dict.get('Parcelas com Valor Alterado', 0),
+            divergencias_json=df_divergencias.to_json(orient='split', index=False) if not df_divergencias.empty else 'null',
+            adicionados_json=df_adicionados.to_json(orient='split', index=False) if not df_adicionados.empty else 'null',
+            removidos_json=df_removidos.to_json(orient='split', index=False) if not df_removidos.empty else 'null',
+            download_url=url_for('download_file', filename=report_filename)
+        )
 
     except Exception as e:
         traceback.print_exc()
-        return f"Ocorreu um erro inesperado durante a comparação: {e}", 500
+        return manual_render_template('error.html', status_code=500,
+            error_title="Erro inesperado na comparação", 
+            error_message=f"Ocorreu um erro grave durante a comparação dos arquivos. Detalhes: {e}")
 
 @app.route('/download/<filename>')
 def download_file(filename):
@@ -419,4 +467,6 @@ def download_file(filename):
     return send_file(path, as_attachment=True)
 
 if __name__ == '__main__':
+
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
