@@ -241,50 +241,55 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
     df_todas = pd.DataFrame(linhas_todas)
     df_cov = pd.DataFrame(linhas_cov)
     df_div = pd.DataFrame(linhas_div)
-    if not df_todas.empty:
-        # <<NOVA ALTERAÇÃO>>: Adicionada regra para remover linhas que começam com "Total Banco"
-        parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
-        df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-        df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
     
     return df_todas, df_cov, df_div
 
 def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_boleto):
-    df_todas_ant, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
-    df_todas_atu, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
+    df_todas_ant_raw, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
+    df_todas_atu_raw, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
+    
+    df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
+    df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
+
+    # <<NOVA ALTERAÇÃO>>: Calcula o total do mês atual também
+    df_totais_atu = df_todas_atu_raw[df_todas_atu_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
+    df_totais_atu = df_totais_atu[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Atual'})
+
+    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+    df_todas_ant = df_todas_ant_raw[~df_todas_ant_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
+    df_todas_atu = df_todas_atu_raw[~df_todas_atu_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
+    
+    df_todas_ant = df_todas_ant[~df_todas_ant['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
+    df_todas_atu = df_todas_atu[~df_todas_atu['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
+
     df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
     df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
+
     df_comp = pd.merge(df_todas_ant, df_todas_atu, on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'], how='outer')
     lotes_ant = df_todas_ant[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_atu = df_todas_atu[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='outer', indicator=True)
-    df_adicionados = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento', 'Lote', 'Cliente']]
-    df_removidos = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento', 'Lote', 'Cliente']]
+    
+    df_adicionados_base = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento', 'Lote', 'Cliente']]
+    df_removidos_base = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento', 'Lote', 'Cliente']]
+    
+    # <<NOVA ALTERAÇÃO>>: Junta os totais aos clientes adicionados e removidos
+    df_adicionados = pd.merge(df_adicionados_base, df_totais_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='left')
+    df_removidos = pd.merge(df_removidos_base, df_totais_ant, on=['Empreendimento', 'Lote', 'Cliente'], how='left')
+
     df_divergencias = df_comp[(pd.notna(df_comp['Valor Anterior'])) & (pd.notna(df_comp['Valor Atual'])) & (abs(df_comp['Valor Anterior'] - df_comp['Valor Atual']) > 1e-6)].copy()
     df_divergencias['Diferença'] = df_divergencias['Valor Atual'] - df_divergencias['Valor Anterior']
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
     df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna() & pd.notna(df_comp['Valor Anterior'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
-    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
-    
-    df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-    df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
-
-    df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-    df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
-
-    df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-    df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
     
     resumo = {
-        "Lotes Mês Anterior": len(lotes_ant),
-        "Lotes Mês Atual": len(lotes_atu),
-        "Lotes Adicionados": len(df_adicionados),
-        "Lotes Removidos": len(df_removidos),
+        "Lotes Mês Anterior": len(lotes_ant), "Lotes Mês Atual": len(lotes_atu),
+        "Lotes Adicionados": len(df_adicionados), "Lotes Removidos": len(df_removidos),
         "Parcelas com Valor Alterado": len(df_divergencias)
     }
     df_resumo = pd.DataFrame([resumo])
-
     return df_resumo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
+
 # ==== Funções de Formatação do Excel ====
 def formatar_excel(output_stream, dfs: dict):
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
@@ -346,7 +351,13 @@ def upload_file():
                 error_title="Erro ao ler o PDF", 
                 error_message="Não foi possível extrair o texto do arquivo enviado. Ele pode estar corrompido ou ser uma imagem.")
 
-        df_todas, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
+        df_todas_raw, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
+        
+        df_todas = df_todas_raw.copy()
+        if not df_todas.empty:
+            parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+            df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+            df_todas = df_todas[~df_todas['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')]
         
         output = io.BytesIO()
         dfs_to_excel = {"Divergencias": df_div, "Cobertura_Analise": df_cov, "Todas_Parcelas_Extraidas": df_todas}
@@ -467,5 +478,4 @@ def download_file(filename):
     return send_file(path, as_attachment=True)
 
 if __name__ == '__main__':
-
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
