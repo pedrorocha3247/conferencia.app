@@ -5,7 +5,7 @@ import sys
 import re
 import unicodedata
 import io
-import fitz  # PyMuPDF
+import fitz
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, render_template, request, send_file, url_for
@@ -226,7 +226,7 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     lotes_ant = df_todas_ant[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_atu = df_todas_atu[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     
-    lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Lote', 'Cliente'], how='outer', indicator=True)
+    lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Lote', 'Cliente'], how='outer', indicator=True, suffixes=('_x', '_y'))
     
     df_adicionados = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento_y', 'Lote', 'Cliente']].rename(columns={'Empreendimento_y': 'Empreendimento'})
     df_removidos = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento_x', 'Lote', 'Cliente']].rename(columns={'Empreendimento_x': 'Empreendimento'})
@@ -241,6 +241,11 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
     df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna() & pd.notna(df_comp['Valor Anterior'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
     
+    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+    df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+    df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+    df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+
     resumo = {
         "Lotes Mês Anterior": len(lotes_ant),
         "Lotes Mês Atual": len(lotes_atu),
@@ -252,7 +257,7 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
 
     if not df_resumo.empty:
         empty_row = pd.Series([None] * len(df_resumo.columns), index=df_resumo.columns)
-        total_row = df_resumo.sum()
+        total_row = df_resumo.sum(numeric_only=True) # Garante que só colunas numéricas sejam somadas
         
         df_resumo = pd.concat([
             df_resumo, 
@@ -271,6 +276,8 @@ def formatar_excel(output_stream, dfs: dict):
             if not df.empty:
                 df.to_excel(writer, index=False, sheet_name=sheet_name)
         number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
+        integer_style = NamedStyle(name='br_integer_style', number_format='0')
+        
         for sheet_name in writer.sheets:
             worksheet = writer.sheets[sheet_name]
             for column_cells in worksheet.columns:
@@ -279,8 +286,12 @@ def formatar_excel(output_stream, dfs: dict):
                 for cell in column_cells:
                     if cell.value:
                         max_length = max(max_length, len(str(cell.value)))
-                    if isinstance(cell.value, (int, float)):
+                    if isinstance(cell.value, float):
                         cell.style = number_style
+                    elif isinstance(cell.value, int):
+                        if sheet_name == 'Resumo':
+                            cell.style = integer_style
+
                 adjusted_width = (max_length + 2)
                 worksheet.column_dimensions[column].width = adjusted_width
     return output_stream
@@ -388,16 +399,6 @@ def compare_files():
             texto_ant, texto_atu, modo_separacao, emp_fixo_boleto
         )
         
-        # <<CORREÇÃO>>: A lógica de filtro foi movida para DENTRO de processar_comparativo.
-        # Essas linhas são redundantes e causam o erro. Elas devem ser removidas.
-        # parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
-        # if not df_divergencias.empty:
-        #     df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-        # if not df_parcelas_novas.empty:
-        #     df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-        # if not df_parcelas_removidas.empty:
-        #     df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-
         output = io.BytesIO()
         dfs_to_excel = {
             "Resumo": df_resumo,
