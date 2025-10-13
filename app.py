@@ -241,15 +241,6 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
     df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna() & pd.notna(df_comp['Valor Anterior'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
     
-    # Filtra as parcelas indesejadas
-    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
-    if not df_divergencias.empty:
-        df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-    if not df_parcelas_novas.empty:
-        df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-    if not df_parcelas_removidas.empty:
-        df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
-
     resumo = {
         "Lotes Mês Anterior": len(lotes_ant),
         "Lotes Mês Atual": len(lotes_atu),
@@ -396,6 +387,16 @@ def compare_files():
         df_resumo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas = processar_comparativo(
             texto_ant, texto_atu, modo_separacao, emp_fixo_boleto
         )
+        
+        # <<CORREÇÃO>>: A lógica de filtro foi movida para DENTRO de processar_comparativo.
+        # Essas linhas são redundantes e causam o erro. Elas devem ser removidas.
+        # parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+        # if not df_divergencias.empty:
+        #     df_divergencias = df_divergencias[~df_divergencias['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+        # if not df_parcelas_novas.empty:
+        #     df_parcelas_novas = df_parcelas_novas[~df_parcelas_novas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
+        # if not df_parcelas_removidas.empty:
+        #     df_parcelas_removidas = df_parcelas_removidas[~df_parcelas_removidas['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)]
 
         output = io.BytesIO()
         dfs_to_excel = {
@@ -432,4 +433,3 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
-
