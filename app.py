@@ -336,43 +336,62 @@ def formatar_excel(output_stream, dfs: dict):
 
         number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
 
-        # Estilos visuais
+        # === Estilos visuais ===
         header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True)
         center = Alignment(horizontal="center", vertical="center")
         thin = Side(style="thin")
-        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        double_top = Side(style="double")
+        border_normal = Border(left=thin, right=thin, top=thin, bottom=thin)
+        border_double_top = Border(left=thin, right=thin, top=double_top, bottom=thin)
 
-        # === Formatação padrão para TODAS as abas ===
+        # === Formatação geral (todas as abas) ===
         for sheet_name in writer.sheets:
             ws = writer.sheets[sheet_name]
-            ws.sheet_view.showGridLines = False  # remove linhas de grade
+            ws.sheet_view.showGridLines = False  # remove grade
 
-            # Cabeçalho com azul escuro e branco
+            # Cabeçalho
             for c in ws[1]:
                 c.fill = header_fill
                 c.font = header_font
                 c.alignment = center
-                c.border = border
+                c.border = border_normal
 
-            # Alinhamento e bordas
-            for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                for c in row:
-                    c.alignment = center
-                    c.border = border
-                    if isinstance(c.value, (int, float)):
-                        c.style = number_style
-
-            # Auto largura de colunas
+            # Define largura e formata as células
             for col in ws.columns:
                 col_letter = get_column_letter(col[0].column)
                 max_len = max((len(str(c.value)) for c in col if c.value), default=0)
                 ws.column_dimensions[col_letter].width = max_len + 4
 
-        # === Aba RESUMO ===
+                for c in col:
+                    c.alignment = center
+                    c.border = border_normal
+
+                    # Aplica estilo numérico padrão
+                    if isinstance(c.value, (int, float)):
+                        c.style = number_style
+
+            # === Colunas de totais (valores monetários) ===
+            # Detecta qualquer coluna com nome que contenha 'TOTAL' (case-insensitive)
+            header_row = [cell.value for cell in ws[1] if cell.value]
+            for idx, header in enumerate(header_row, start=1):
+                if header and "TOTAL" in str(header).upper():
+                    for cell in ws[get_column_letter(idx)]:
+                        if isinstance(cell.value, (int, float)):
+                            cell.number_format = '#,##0.00'
+                            cell.font = Font(bold=True, color="003366")
+                            cell.alignment = center
+
+                    # Adiciona borda dupla superior na primeira linha de valores abaixo do cabeçalho
+                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=idx, max_col=idx):
+                        for cell in row:
+                            if isinstance(cell.value, (int, float)):
+                                cell.border = border_double_top
+
+        # === Aba RESUMO (formatação especial) ===
         if "Resumo" in writer.sheets:
             ws = writer.sheets["Resumo"]
-            ws.delete_rows(1, ws.max_row)  # limpa pra redesenhar
+            ws.delete_rows(1, ws.max_row)
 
             headers = [
                 "Lotes Mês Anterior",
@@ -391,42 +410,41 @@ def formatar_excel(output_stream, dfs: dict):
                     int(df_resumo.iloc[0].get("Lotes Mês Atual", 0)),
                     int(df_resumo.iloc[0].get("Lotes Adicionados", 0)),
                     int(df_resumo.iloc[0].get("Lotes Removidos", 0)),
-                    int(df_resumo.iloc[0].get("Parcelas com Valor Alterado", 0)),
+                    int(df_resumo.iloc[0].get("Parcelas com Valor Alterado", 0))
                 ]
                 ws.append(linha_qtd)
 
-                # Linha 3 (totais, sem “R$”)
+                # Linha 3 (totais, sem R$)
                 linha_val = [
                     float(df_resumo.iloc[0].get("Valor Mês Anterior", 0.0)),
                     float(df_resumo.iloc[0].get("Valor Mês Atual", 0.0)),
                     float(df_resumo.iloc[0].get("Valor Lotes Adicionados", 0.0)),
                     float(df_resumo.iloc[0].get("Valor Lotes Removidos", 0.0)),
-                    float(df_resumo.iloc[0].get("Valor Parcelas com Valor Alterado", 0.0)),
+                    float(df_resumo.iloc[0].get("Valor Parcelas com Valor Alterado", 0.0))
                 ]
                 ws.append(linha_val)
 
-                # === Cabeçalho (linha 1)
+                # Cabeçalho
                 for c in ws[1]:
                     c.fill = header_fill
                     c.font = header_font
                     c.alignment = center
-                    c.border = border
+                    c.border = border_normal
 
-                # === Linha 2 (quantidades)
+                # Linha 2 (quantidades)
                 for c in ws[2]:
                     c.alignment = center
-                    c.font = Font(bold=True, color="000000")
-                    c.border = border
+                    c.font = Font(bold=True)
+                    c.border = border_normal
 
-                # === Linha 3 (totais) — destaque
-                double_top = Side(style="double")
+                # Linha 3 (valores)
                 for c in ws[3]:
                     c.alignment = center
                     c.font = Font(bold=True, color="003366")
-                    c.border = Border(left=thin, right=thin, top=double_top, bottom=thin)
-                    c.number_format = '#,##0.00'  # sem símbolo “R$”
+                    c.border = border_double_top
+                    c.number_format = '#,##0.00'
 
-            # Largura uniforme
+            # Largura das colunas
             for col in ws.columns:
                 ws.column_dimensions[get_column_letter(col[0].column)].width = 25
 
@@ -605,6 +623,7 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
 
 
 
