@@ -325,47 +325,66 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
 
 # ==== Funções de Formatação do Excel ====
 def formatar_excel(output_stream, dfs: dict):
+    from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
-        # Escreve as planilhas
+        # Escreve todas as abas
         for sheet_name, df in dfs.items():
             if not df.empty:
                 df.to_excel(writer, index=False, sheet_name=sheet_name)
 
         number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
+        money_style = NamedStyle(name='br_money_style', number_format='R$ #,##0.00')
 
-        # Ajustes gerais + remover linhas de grade em TODAS as abas
+        # Estilos comuns
+        header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
+        header_font = Font(color="FFFFFF", bold=True)
+        center = Alignment(horizontal="center", vertical="center")
+        thin = Side(style="thin")
+        border = Border(left=thin, right=thin, top=thin, bottom=thin)
+        bold_font = Font(bold=True)
+
+        # Ajustes gerais para TODAS as abas
         for sheet_name in writer.sheets:
             ws = writer.sheets[sheet_name]
-            ws.sheet_view.showGridLines = False  # remove gridlines
-            # Auto-largura + estilo numérico
-            for col in ws.columns:
-                max_length = 0
-                col_letter = get_column_letter(col[0].column)
-                for cell in col:
-                    if cell.value:
-                        max_length = max(max_length, len(str(cell.value)))
-                    if isinstance(cell.value, float):
-                        cell.style = number_style
-                ws.column_dimensions[col_letter].width = max_length + 2
+            ws.sheet_view.showGridLines = False  # remove grade
 
-        # === Reformatação especial da aba "Resumo" (layout do print 2) ===
+            # Cabeçalho azul + branco em todas as abas
+            for cell in ws[1]:
+                cell.fill = header_fill
+                cell.font = header_font
+                cell.alignment = center
+                cell.border = border
+
+            # Ajuste automático de colunas + estilo numérico
+            for col in ws.columns:
+                col_letter = get_column_letter(col[0].column)
+                max_length = max((len(str(c.value)) for c in col if c.value), default=0)
+                ws.column_dimensions[col_letter].width = max_length + 4
+                for c in col:
+                    if isinstance(c.value, (int, float)):
+                        c.style = number_style
+                    c.alignment = center
+                    c.border = border
+
+        # ==== ABA RESUMO ====
         if "Resumo" in writer.sheets:
             ws = writer.sheets["Resumo"]
-            # Limpa a aba para redesenhar
-            ws.delete_rows(1, ws.max_row)
+            ws.delete_rows(1, ws.max_row)  # limpa para redesenhar
 
             headers = [
                 "Lotes Mês Anterior",
                 "Lotes Mês Atual",
                 "Lotes Adicionados",
                 "Lotes Removidos",
-                "Parcelas com Valor Alterado"
+                "Parcelas com Valor Alterado",
             ]
             ws.append(headers)
 
             df_resumo = dfs.get("Resumo", pd.DataFrame())
-            # Linha 2 (quantidades) + Linha 3 (valores R$)
             if not df_resumo.empty:
+                # Linha 2 - quantidades (sem estilo monetário)
                 linha_qtd = [
                     int(df_resumo.iloc[0].get("Lotes Mês Anterior", 0)),
                     int(df_resumo.iloc[0].get("Lotes Mês Atual", 0)),
@@ -373,6 +392,9 @@ def formatar_excel(output_stream, dfs: dict):
                     int(df_resumo.iloc[0].get("Lotes Removidos", 0)),
                     int(df_resumo.iloc[0].get("Parcelas com Valor Alterado", 0)),
                 ]
+                ws.append(linha_qtd)
+
+                # Linha 3 - totais (R$)
                 linha_val = [
                     float(df_resumo.iloc[0].get("Valor Mês Anterior", 0.0)),
                     float(df_resumo.iloc[0].get("Valor Mês Atual", 0.0)),
@@ -380,30 +402,29 @@ def formatar_excel(output_stream, dfs: dict):
                     float(df_resumo.iloc[0].get("Valor Lotes Removidos", 0.0)),
                     float(df_resumo.iloc[0].get("Valor Parcelas com Valor Alterado", 0.0)),
                 ]
-                ws.append(linha_qtd)
                 ws.append(linha_val)
 
-            # Estética
-            header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-            header_font = Font(color="FFFFFF", bold=True)
-            center = Alignment(horizontal="center", vertical="center")
-            thin = Side(style="thin")
-            border = Border(left=thin, right=thin, top=thin, bottom=thin)
+                # Estilo cabeçalho (linha 1)
+                for c in ws[1]:
+                    c.fill = header_fill
+                    c.font = header_font
+                    c.alignment = center
+                    c.border = border
 
-            for cell in ws[1]:
-                cell.fill = header_fill
-                cell.font = header_font
-                cell.alignment = center
-                cell.border = border
+                # Linha 2 (quantidades) - sem formatação monetária
+                for c in ws[2]:
+                    c.alignment = center
+                    c.border = border
+                    c.font = Font(bold=True, color="000000")
 
-            for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                for cell in row:
-                    cell.alignment = center
-                    cell.border = border
-                    if isinstance(cell.value, (int, float)):
-                        cell.style = number_style
+                # Linha 3 (totais R$) - destaque
+                for c in ws[3]:
+                    c.alignment = center
+                    c.style = money_style
+                    c.border = Border(left=thin, right=thin, top=Side(style="double"), bottom=thin)
+                    c.font = Font(bold=True, color="003366")
 
-            # Largura fixa “clean”
+            # Largura padrão igual
             for col in ws.columns:
                 ws.column_dimensions[get_column_letter(col[0].column)].width = 25
 
@@ -582,4 +603,5 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
 
