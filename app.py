@@ -329,66 +329,64 @@ def formatar_excel(output_stream, dfs: dict):
     from openpyxl.utils import get_column_letter
 
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
-        # Escreve todas as abas
+        # Escreve todas as abas normalmente
         for sheet_name, df in dfs.items():
             if not df.empty:
                 df.to_excel(writer, index=False, sheet_name=sheet_name)
 
-        number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
-
-        # === Estilos visuais ===
+        # === Estilos ===
         header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
         header_font = Font(color="FFFFFF", bold=True)
-        center = Alignment(horizontal="center", vertical="center")
-        thin = Side(style="thin")
-        double_top = Side(style="double")
-        border_normal = Border(left=thin, right=thin, top=thin, bottom=thin)
-        border_double_top = Border(left=thin, right=thin, top=double_top, bottom=thin)
+        font_value = Font(bold=True, color="003366")
+        align_center = Alignment(horizontal="center", vertical="center")
 
-        # === Formatação geral (todas as abas) ===
+        thin = Side(style="thin")
+        double_side = Side(style="double")
+
+        # Borda com dupla lateral e linha fina superior/inferior
+        border_all_double = Border(left=double_side, right=double_side, top=thin, bottom=thin)
+        num_format = '#,##0.00'
+
+        # === Aplicação em TODAS as abas ===
         for sheet_name in writer.sheets:
             ws = writer.sheets[sheet_name]
-            ws.sheet_view.showGridLines = False  # remove grade
+            ws.sheet_view.showGridLines = False  # remove linhas de grade
 
-            # Cabeçalho
+            # Cabeçalho (linha 1)
             for c in ws[1]:
                 c.fill = header_fill
                 c.font = header_font
-                c.alignment = center
-                c.border = border_normal
+                c.alignment = align_center
+                c.border = border_all_double
 
-            # Define largura e formata as células
+            # Detecta automaticamente as colunas com valores numéricos
+            headers = [cell.value for cell in ws[1] if cell.value]
+            valor_cols = [
+                idx + 1 for idx, h in enumerate(headers)
+                if any(k in str(h).upper() for k in [
+                    "VALOR", "TOTAL", "DIFEREN", "ATUAL", "ANTERIOR"
+                ])
+            ]
+
+            # Ajuste de largura automática e bordas duplas para todas as colunas
             for col in ws.columns:
                 col_letter = get_column_letter(col[0].column)
                 max_len = max((len(str(c.value)) for c in col if c.value), default=0)
                 ws.column_dimensions[col_letter].width = max_len + 4
 
-                for c in col:
-                    c.alignment = center
-                    c.border = border_normal
-
-                    # Aplica estilo numérico padrão
+            # Formatação das células (borda dupla lateral em TODAS)
+            for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
+                for c in row:
+                    c.alignment = align_center
+                    c.border = border_all_double
                     if isinstance(c.value, (int, float)):
-                        c.style = number_style
+                        c.number_format = num_format
+                        if c.col_idx in valor_cols:
+                            c.font = font_value  # aplica destaque azul para colunas de valor
+                        else:
+                            c.font = Font(bold=False, color="000000")
 
-            # === Colunas de totais (valores monetários) ===
-            # Detecta qualquer coluna com nome que contenha 'TOTAL' (case-insensitive)
-            header_row = [cell.value for cell in ws[1] if cell.value]
-            for idx, header in enumerate(header_row, start=1):
-                if header and "TOTAL" in str(header).upper():
-                    for cell in ws[get_column_letter(idx)]:
-                        if isinstance(cell.value, (int, float)):
-                            cell.number_format = '#,##0.00'
-                            cell.font = Font(bold=True, color="003366")
-                            cell.alignment = center
-
-                    # Adiciona borda dupla superior na primeira linha de valores abaixo do cabeçalho
-                    for row in ws.iter_rows(min_row=2, max_row=ws.max_row, min_col=idx, max_col=idx):
-                        for cell in row:
-                            if isinstance(cell.value, (int, float)):
-                                cell.border = border_double_top
-
-        # === Aba RESUMO (formatação especial) ===
+        # === Aba RESUMO (mantém estilo especial) ===
         if "Resumo" in writer.sheets:
             ws = writer.sheets["Resumo"]
             ws.delete_rows(1, ws.max_row)
@@ -404,7 +402,6 @@ def formatar_excel(output_stream, dfs: dict):
 
             df_resumo = dfs.get("Resumo", pd.DataFrame())
             if not df_resumo.empty:
-                # Linha 2 (quantidades)
                 linha_qtd = [
                     int(df_resumo.iloc[0].get("Lotes Mês Anterior", 0)),
                     int(df_resumo.iloc[0].get("Lotes Mês Atual", 0)),
@@ -414,7 +411,6 @@ def formatar_excel(output_stream, dfs: dict):
                 ]
                 ws.append(linha_qtd)
 
-                # Linha 3 (totais, sem R$)
                 linha_val = [
                     float(df_resumo.iloc[0].get("Valor Mês Anterior", 0.0)),
                     float(df_resumo.iloc[0].get("Valor Mês Atual", 0.0)),
@@ -428,27 +424,28 @@ def formatar_excel(output_stream, dfs: dict):
                 for c in ws[1]:
                     c.fill = header_fill
                     c.font = header_font
-                    c.alignment = center
-                    c.border = border_normal
+                    c.alignment = align_center
+                    c.border = border_all_double
 
-                # Linha 2 (quantidades)
+                # Linha 2 - quantidades
                 for c in ws[2]:
-                    c.alignment = center
+                    c.alignment = align_center
                     c.font = Font(bold=True)
-                    c.border = border_normal
+                    c.border = border_all_double
 
-                # Linha 3 (valores)
+                # Linha 3 - valores (mantém borda dupla superior)
                 for c in ws[3]:
-                    c.alignment = center
-                    c.font = Font(bold=True, color="003366")
-                    c.border = border_double_top
-                    c.number_format = '#,##0.00'
+                    c.number_format = num_format
+                    c.font = font_value
+                    c.alignment = align_center
+                    c.border = Border(left=double_side, right=double_side, top=Side(style="double"), bottom=thin)
 
-            # Largura das colunas
+            # Largura uniforme
             for col in ws.columns:
                 ws.column_dimensions[get_column_letter(col[0].column)].width = 25
 
     return output_stream
+
 
 # ==== Rotas da Aplicação ====
 @app.route('/')
@@ -623,6 +620,7 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
 
 
 
