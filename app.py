@@ -71,11 +71,13 @@ def manual_render_template(template_name, status_code=200, **kwargs):
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-        
+
         for key, value in kwargs.items():
-            placeholder = f"__{key.upper()__}"
+            # ✅ CORRIGIDO: fecha o parêntese antes dos "__"
+            placeholder = f"__{key.upper()}__"
+            # se o valor já contém chaves (ex.: um JSON) preserva aspas do template
             if isinstance(value, str) and ('{' in value and '}' in value):
-                 html_content = html_content.replace(f'"{placeholder}"', value)
+                html_content = html_content.replace(f'"{placeholder}"', value)
             else:
                 html_content = html_content.replace(placeholder, str(value))
 
@@ -84,7 +86,12 @@ def manual_render_template(template_name, status_code=200, **kwargs):
         return response, status_code
     except Exception as e:
         print(f"ERRO CRÍTICO AO RENDERIZAR MANUALMENTE '{template_name}': {e}")
-        return f"<h1>Erro 500: Falha Crítica ao Carregar Template</h1><p>O arquivo {template_name} não pôde ser lido. Erro: {e}</p>", 500
+        return (
+            f"<h1>Erro 500: Falha Crítica ao Carregar Template</h1>"
+            f"<p>O arquivo {template_name} não pôde ser lido. Erro: {e}</p>",
+            500
+        )
+
 
 # ==== Funções de Normalização e Extração ====
 def normalizar_texto(s: str) -> str:
@@ -575,3 +582,4 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
