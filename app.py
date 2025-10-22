@@ -9,11 +9,11 @@ import fitz
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, request, send_file, url_for, make_response
-from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
 import traceback
 import openpyxl
 from openpyxl import Workbook, load_workbook
+from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
 from copy import copy
 import zipfile
 
@@ -330,6 +330,7 @@ def formatar_excel(output_stream, dfs: dict):
                 worksheet.column_dimensions[column].width = adjusted_width
     return output_stream
 
+
 def normalizar_valor_repasse(valor):
     if valor is None:
         return 0.0
@@ -348,7 +349,7 @@ def normalizar_valor_repasse(valor):
         return 0.0
 
 def copiar_formatacao(origem, destino):
-    if origem.has_style:
+    if origem and origem.has_style:
         destino.font = copy(origem.font)
         destino.border = copy(origem.border)
         destino.fill = copy(origem.fill)
@@ -368,13 +369,14 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
 
     for i, cell in enumerate(ws_diario[1], 1):
         novo = ws_out.cell(row=1, column=i, value=cell.value)
-        copiar_formatacao(cell, novo)
+        if cell:
+            copiar_formatacao(cell, novo)
         ws_out.column_dimensions[openpyxl.utils.get_column_letter(i)].width = ws_diario.column_dimensions[
             openpyxl.utils.get_column_letter(i)
         ].width
 
     if incluir_status:
-        col_status = len(ws_diario[1]) + 1
+        col_status = len(list(ws_diario[1])) + 1
         ws_out.cell(row=1, column=col_status, value="Status")
 
     linha_out = 2
@@ -461,10 +463,16 @@ def processar_repasse(diario_stream, sistema_stream):
     duplicados_vistos = set()
 
     for row in ws_diario.iter_rows(min_row=2):
-        eql = str(row[col_eq_diario - 1].value).strip() if row[col_eq_diario - 1].value else ""
-        parcela = str(row[col_parcela_diario - 1].value).strip() if row[col_parcela_diario - 1].value else ""
-        principal = normalizar_valor_repasse(row[col_principal_diario - 1].value)
-        correcao = normalizar_valor_repasse(row[col_corrmonet_diario - 1].value)
+        celula_eql = row[col_eq_diario - 1]
+        celula_parcela = row[col_parcela_diario - 1]
+        celula_principal = row[col_principal_diario - 1]
+        celula_correcao = row[col_corrmonet_diario - 1]
+
+        eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value else ""
+        parcela = str(celula_parcela.value).strip() if celula_parcela and celula_parcela.value else ""
+        principal = normalizar_valor_repasse(celula_principal.value if celula_principal else None)
+        correcao = normalizar_valor_repasse(celula_correcao.value if celula_correcao else None)
+        
         chave_simples = (eql, parcela)
         chave_completa = (eql, parcela, principal, correcao)
 
