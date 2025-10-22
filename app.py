@@ -9,11 +9,11 @@ import fitz
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, request, send_file, url_for, make_response
-from openpyxl.styles import NamedStyle
+from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
+from openpyxl.utils import get_column_letter
 import traceback
 import openpyxl
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import NamedStyle
 from copy import copy
 import zipfile
 
@@ -293,7 +293,7 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     return df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas
 
 def formatar_excel(output_stream, dfs: dict):
-    from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
     from openpyxl.utils import get_column_letter
 
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
@@ -329,7 +329,6 @@ def formatar_excel(output_stream, dfs: dict):
                 adjusted_width = (max_length + 2)
                 worksheet.column_dimensions[column].width = adjusted_width
     return output_stream
-
 
 def normalizar_valor_repasse(valor):
     if valor is None:
@@ -367,15 +366,9 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out = Workbook()
     ws_out = wb_out.active
 
-    for i, cell in enumerate(linha, 1):
-        try:
-            valor = cell.value if hasattr(cell, "value") else cell
-            novo = ws_out.cell(row=linha_out, column=i, value=valor)
-            if hasattr(cell, "value"):
-                copiar_formatacao(cell, novo)
-        except Exception as e:
-            print(f"[Aviso] Erro ao copiar célula {i} da linha {linha_out}: {e}")
-
+    for i, cell in enumerate(ws_diario[1], 1):
+        novo = ws_out.cell(row=1, column=i, value=cell.value)
+        copiar_formatacao(cell, novo)
         ws_out.column_dimensions[openpyxl.utils.get_column_letter(i)].width = ws_diario.column_dimensions[
             openpyxl.utils.get_column_letter(i)
         ].width
@@ -398,8 +391,9 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
             continue
 
         for i, cell in enumerate(linha, 1):
-            novo = ws_out.cell(row=linha_out, column=i, value=cell.value)
-            if hasattr(cell, "value"):
+            valor = cell.value if cell is not None else None
+            novo = ws_out.cell(row=linha_out, column=i, value=valor)
+            if cell is not None:
                 copiar_formatacao(cell, novo)
 
         if incluir_status:
@@ -716,4 +710,3 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
-
