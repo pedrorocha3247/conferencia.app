@@ -9,6 +9,7 @@ import fitz
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, request, send_file, url_for, make_response
+from openpyxl.styles import NamedStyle
 import traceback
 import openpyxl
 from openpyxl import Workbook, load_workbook
@@ -292,6 +293,9 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     return df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas
 
 def formatar_excel(output_stream, dfs: dict):
+    from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
+    from openpyxl.utils import get_column_letter
+
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
         for sheet_name, df in dfs.items():
             if not df.empty:
@@ -306,12 +310,14 @@ def formatar_excel(output_stream, dfs: dict):
         for sheet_name in writer.sheets:
             worksheet = writer.sheets[sheet_name]
             worksheet.sheet_view.showGridLines = False
+            
             for column_cells in worksheet.columns:
                 max_length = 0
                 column = column_cells[0].column_letter
                 for cell in column_cells:
                     if cell.value:
                         max_length = max(max_length, len(str(cell.value)))
+                    
                     if isinstance(cell.value, float):
                         cell.style = number_style
                     elif isinstance(cell.value, int):
@@ -492,8 +498,6 @@ def processar_repasse(diario_stream, sistema_stream):
 
     return iguais_stream, divergentes_stream, len(iguais), len(divergentes)
 
-
-# ==== Rotas da Aplicação ====
 
 @app.route('/')
 def index():
