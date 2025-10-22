@@ -367,9 +367,15 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out = Workbook()
     ws_out = wb_out.active
 
-    for i, cell in enumerate(ws_diario[1], 1):
-        novo = ws_out.cell(row=1, column=i, value=cell.value)
-        copiar_formatacao(cell, novo)
+    for i, cell in enumerate(linha, 1):
+        try:
+            valor = cell.value if hasattr(cell, "value") else cell
+            novo = ws_out.cell(row=linha_out, column=i, value=valor)
+            if hasattr(cell, "value"):
+                copiar_formatacao(cell, novo)
+        except Exception as e:
+            print(f"[Aviso] Erro ao copiar célula {i} da linha {linha_out}: {e}")
+
         ws_out.column_dimensions[openpyxl.utils.get_column_letter(i)].width = ws_diario.column_dimensions[
             openpyxl.utils.get_column_letter(i)
         ].width
@@ -710,3 +716,4 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
+
