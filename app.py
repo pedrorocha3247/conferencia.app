@@ -5,39 +5,35 @@ import sys
 import re
 import unicodedata
 import io
-import fitz  # PyMuPDF
+import fitz
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, request, send_file, url_for, make_response
-from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
 import traceback
+import openpyxl
+from openpyxl import Workbook, load_workbook
+from openpyxl.styles import NamedStyle
+from copy import copy
+import zipfile
 
-# ==== Constantes e Mapeamentos ====
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
-
 HEADERS = (
     "Remessa para Conferência", "Página", "Banco", "IMOBILIARIOS", "Débitos do Mês",
     "Vencimento", "Lançamentos", "Programação", "Carta", "DÉBITOS", "ENCARGOS",
     "PAGAMENTO", "TOTAL", "Limite p/", "TOTAL A PAGAR", "PAGAMENTO EFETUADO", "DESCONTO"
 )
-
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.([A-Z0-9\u0399\u039A]{2})\.\d{1,4})\b")
-
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
     r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*"
     r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/\d]+?)\s+([\d.,]+)"
     r"(?=\s{2,}|\t|$)", re.MULTILINE
 )
-
 PADRAO_NUMERO_PURO = re.compile(r"^\s*([\d\.,]+)\s*$")
-
 CODIGO_EMP_MAP = {
     '04': 'RSCI', '05': 'RSCIV', '06': 'RSCII', '07': 'RSCV', '08': 'RSCIII',
     '09': 'IATE', '10': 'MARINA', '11': 'NVI', '12': 'NVII',
     '13': 'SBRRI', '14': 'SBRRII', '15': 'SBRRIII'
 }
-
 EMP_MAP = {
     "NVI": {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
     "NVII": {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
@@ -52,7 +48,6 @@ EMP_MAP = {
     "SBRRIII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     "RSCV": {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00},
 }
-
 BASE_FIXOS = {
     "Taxa de Conservação": [434.11],
     "Contrib. Social SLIM": [103.00, 309.00],
@@ -61,7 +56,6 @@ BASE_FIXOS = {
     "Contribuição ABRASMA - Ouro": [60.00],
 }
 
-# --- Início da Aplicação Web Flask ---
 app = Flask(__name__)
 app.config['UPLOAD_FOLDER'] = 'uploads'
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -71,13 +65,11 @@ def manual_render_template(template_name, status_code=200, **kwargs):
     try:
         with open(template_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-
+        
         for key, value in kwargs.items():
-            # ✅ CORRIGIDO: fecha o parêntese antes dos "__"
             placeholder = f"__{key.upper()}__"
-            # se o valor já contém chaves (ex.: um JSON) preserva aspas do template
             if isinstance(value, str) and ('{' in value and '}' in value):
-                html_content = html_content.replace(f'"{placeholder}"', value)
+                 html_content = html_content.replace(f'"{placeholder}"', value)
             else:
                 html_content = html_content.replace(placeholder, str(value))
 
@@ -86,14 +78,8 @@ def manual_render_template(template_name, status_code=200, **kwargs):
         return response, status_code
     except Exception as e:
         print(f"ERRO CRÍTICO AO RENDERIZAR MANUALMENTE '{template_name}': {e}")
-        return (
-            f"<h1>Erro 500: Falha Crítica ao Carregar Template</h1>"
-            f"<p>O arquivo {template_name} não pôde ser lido. Erro: {e}</p>",
-            500
-        )
+        return f"<h1>Erro 500: Falha Crítica ao Carregar Template</h1><p>O arquivo {template_name} não pôde ser lido. Erro: {e}</p>", 500
 
-
-# ==== Funções de Normalização e Extração ====
 def normalizar_texto(s: str) -> str:
     s = s.translate(DASHES).replace("\u00A0", " ")
     s = "".join(ch for ch in s if ch not in "\u200B\u200C\u200D\uFEFF")
@@ -116,7 +102,6 @@ def to_float(s: str):
     except (ValueError, TypeError):
         return None
 
-# ==== Funções de Lógica e Classificação ====
 def fixos_do_emp(emp: str):
     if emp not in EMP_MAP:
         return BASE_FIXOS
@@ -142,7 +127,6 @@ def detectar_emp_por_lote(lote: str):
     prefixo = lote.split('.')[0]
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
-# ==== Funções de Extração de Dados ====
 def limpar_rotulo(lbl: str) -> str:
     lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl).strip()
     lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
@@ -217,7 +201,6 @@ def extrair_parcelas(bloco: str):
                     if lbl and lbl not in itens and val is not None: itens[lbl] = val
     return itens
 
-# ==== Funções de Processamento ====
 def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto: str = None):
     blocos = fatiar_blocos(texto_pdf)
     if not blocos: return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
@@ -251,7 +234,6 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
                     "Parcela": rot, "Valor no Documento": float(val),
                     "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
                 })
-
     df_todas = pd.DataFrame(linhas_todas)
     df_cov = pd.DataFrame(linhas_cov)
     df_div = pd.DataFrame(linhas_div)
@@ -262,191 +244,257 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_todas_ant_raw, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
     df_todas_atu_raw, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
     
-    # Totais por lote (para somar valores globais)
     df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
     df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
 
     df_totais_atu = df_todas_atu_raw[df_todas_atu_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
     df_totais_atu = df_totais_atu[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Atual'})
 
-    # Remove parcelas não comparáveis
     parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
     df_todas_ant = df_todas_ant_raw[~df_todas_ant_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
     df_todas_atu = df_todas_atu_raw[~df_todas_atu_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
+    
     df_todas_ant = df_todas_ant[~df_todas_ant['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
     df_todas_atu = df_todas_atu[~df_todas_atu['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
+
     df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
     df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
 
-    # Merge base p/ divergências e novos/removidos
     df_comp = pd.merge(df_todas_ant, df_todas_atu, on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'], how='outer')
-    lotes_ant = df_todas_ant[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
-    lotes_atu = df_todas_atu[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
+    lotes_ant = df_todas_ant_raw[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
+    lotes_atu = df_todas_atu_raw[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='outer', indicator=True)
     
     df_adicionados_base = lotes_merged[lotes_merged['_merge'] == 'right_only'][['Empreendimento', 'Lote', 'Cliente']]
     df_removidos_base = lotes_merged[lotes_merged['_merge'] == 'left_only'][['Empreendimento', 'Lote', 'Cliente']]
-
-    # Junta totals aos adicionados/removidos
+    
     df_adicionados = pd.merge(df_adicionados_base, df_totais_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='left')
     df_removidos = pd.merge(df_removidos_base, df_totais_ant, on=['Empreendimento', 'Lote', 'Cliente'], how='left')
 
-    # Divergências
     df_divergencias = df_comp[(pd.notna(df_comp['Valor Anterior'])) & (pd.notna(df_comp['Valor Atual'])) & (abs(df_comp['Valor Anterior'] - df_comp['Valor Atual']) > 1e-6)].copy()
     df_divergencias['Diferença'] = df_divergencias['Valor Atual'] - df_divergencias['Valor Anterior']
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
     df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna() & pd.notna(df_comp['Valor Anterior'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
+    
+    total_adicionados_valor = df_adicionados['Total Atual'].sum()
+    total_removidos_valor = df_removidos['Total Anterior'].sum()
+    total_divergencias_valor = df_divergencias['Diferença'].sum()
+    total_mes_anterior_valor = df_totais_ant['Total Anterior'].sum()
+    total_mes_atual_valor = df_totais_atu['Total Atual'].sum()
 
-    # Resumo (quantidades)
-    resumo = {
-        "Lotes Mês Anterior": len(lotes_ant),
-        "Lotes Mês Atual": len(lotes_atu),
-        "Lotes Adicionados": len(df_adicionados),
-        "Lotes Removidos": len(df_removidos),
-        "Parcelas com Valor Alterado": len(df_divergencias),
+    resumo_financeiro_data = {
+        ' ': ['Lotes Mês Anterior', 'Lotes Mês Atual', 'Lotes Adicionados', 'Lotes Removidos', 'Parcelas com Valor Alterado'],
+        'LOTES': [len(lotes_ant), len(lotes_atu), len(df_adicionados), len(df_removidos), len(df_divergencias)],
+        'TOTAIS': [total_mes_anterior_valor, total_mes_atual_valor, total_adicionados_valor, total_removidos_valor, total_divergencias_valor]
     }
+    df_resumo_completo = pd.DataFrame(resumo_financeiro_data)
+    
+    return df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas
 
-    # >>> Novidade: totais em valores para cada coluna do Resumo <<<
-    valor_mes_anterior = df_totais_ant['Total Anterior'].sum() if not df_totais_ant.empty else 0.0
-    valor_mes_atual = df_totais_atu['Total Atual'].sum() if not df_totais_atu.empty else 0.0
-    valor_adicionados = df_adicionados['Total Atual'].sum() if ('Total Atual' in df_adicionados) else 0.0
-    valor_removidos = df_removidos['Total Anterior'].sum() if ('Total Anterior' in df_removidos) else 0.0
-    valor_divergencias = df_divergencias['Diferença'].sum() if ('Diferença' in df_divergencias) else 0.0
-
-    resumo["Valor Mês Anterior"] = float(valor_mes_anterior)
-    resumo["Valor Mês Atual"] = float(valor_mes_atual)
-    resumo["Valor Lotes Adicionados"] = float(valor_adicionados)
-    resumo["Valor Lotes Removidos"] = float(valor_removidos)
-    resumo["Valor Parcelas com Valor Alterado"] = float(valor_divergencias)
-
-    df_resumo = pd.DataFrame([resumo])
-
-    return df_resumo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
-
-# ==== Funções de Formatação do Excel ====
 def formatar_excel(output_stream, dfs: dict):
-    from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
-    from openpyxl.utils import get_column_letter
-
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
-        # Escreve todas as abas normalmente
         for sheet_name, df in dfs.items():
             if not df.empty:
-                df.to_excel(writer, index=False, sheet_name=sheet_name)
+                if sheet_name == "Resumo":
+                    df.to_excel(writer, index=False, sheet_name=sheet_name)
+                else:
+                    df.to_excel(writer, index=False, sheet_name=sheet_name)
+        
+        number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
+        integer_style = NamedStyle(name='br_integer_style', number_format='0')
 
-        # === Estilos ===
-        header_fill = PatternFill(start_color="1F4E78", end_color="1F4E78", fill_type="solid")
-        header_font = Font(color="FFFFFF", bold=True)
-        font_value = Font(bold=True, color="003366")
-        align_center = Alignment(horizontal="center", vertical="center")
-
-        thin = Side(style="thin")
-        double_side = Side(style="double")
-
-        # Borda com dupla lateral e linha fina superior/inferior
-        border_all_double = Border(left=double_side, right=double_side, top=thin, bottom=thin)
-        num_format = '#,##0.00'
-
-        # === Aplicação em TODAS as abas ===
         for sheet_name in writer.sheets:
-            ws = writer.sheets[sheet_name]
-            ws.sheet_view.showGridLines = False  # remove linhas de grade
+            worksheet = writer.sheets[sheet_name]
+            worksheet.sheet_view.showGridLines = False
+            for column_cells in worksheet.columns:
+                max_length = 0
+                column = column_cells[0].column_letter
+                for cell in column_cells:
+                    if cell.value:
+                        max_length = max(max_length, len(str(cell.value)))
+                    if isinstance(cell.value, float):
+                        cell.style = number_style
+                    elif isinstance(cell.value, int):
+                         if sheet_name == 'Resumo' and column == 'B':
+                            cell.style = integer_style
+                         elif column != 'B':
+                            cell.style = number_style
 
-            # Cabeçalho (linha 1)
-            for c in ws[1]:
-                c.fill = header_fill
-                c.font = header_font
-                c.alignment = align_center
-                c.border = border_all_double
-
-            # Detecta automaticamente as colunas com valores numéricos
-            headers = [cell.value for cell in ws[1] if cell.value]
-            valor_cols = [
-                idx + 1 for idx, h in enumerate(headers)
-                if any(k in str(h).upper() for k in [
-                    "VALOR", "TOTAL", "DIFEREN", "ATUAL", "ANTERIOR"
-                ])
-            ]
-
-            # Ajuste de largura automática e bordas duplas para todas as colunas
-            for col in ws.columns:
-                col_letter = get_column_letter(col[0].column)
-                max_len = max((len(str(c.value)) for c in col if c.value), default=0)
-                ws.column_dimensions[col_letter].width = max_len + 4
-
-            # Formatação das células (borda dupla lateral em TODAS)
-            for row in ws.iter_rows(min_row=2, max_row=ws.max_row):
-                for c in row:
-                    c.alignment = align_center
-                    c.border = border_all_double
-                    if isinstance(c.value, (int, float)):
-                        c.number_format = num_format
-                        if c.col_idx in valor_cols:
-                            c.font = font_value  # aplica destaque azul para colunas de valor
-                        else:
-                            c.font = Font(bold=False, color="000000")
-
-        # === Aba RESUMO (mantém estilo especial) ===
-        if "Resumo" in writer.sheets:
-            ws = writer.sheets["Resumo"]
-            ws.delete_rows(1, ws.max_row)
-
-            headers = [
-                "Lotes Mês Anterior",
-                "Lotes Mês Atual",
-                "Lotes Adicionados",
-                "Lotes Removidos",
-                "Parcelas com Valor Alterado"
-            ]
-            ws.append(headers)
-
-            df_resumo = dfs.get("Resumo", pd.DataFrame())
-            if not df_resumo.empty:
-                linha_qtd = [
-                    int(df_resumo.iloc[0].get("Lotes Mês Anterior", 0)),
-                    int(df_resumo.iloc[0].get("Lotes Mês Atual", 0)),
-                    int(df_resumo.iloc[0].get("Lotes Adicionados", 0)),
-                    int(df_resumo.iloc[0].get("Lotes Removidos", 0)),
-                    int(df_resumo.iloc[0].get("Parcelas com Valor Alterado", 0))
-                ]
-                ws.append(linha_qtd)
-
-                linha_val = [
-                    float(df_resumo.iloc[0].get("Valor Mês Anterior", 0.0)),
-                    float(df_resumo.iloc[0].get("Valor Mês Atual", 0.0)),
-                    float(df_resumo.iloc[0].get("Valor Lotes Adicionados", 0.0)),
-                    float(df_resumo.iloc[0].get("Valor Lotes Removidos", 0.0)),
-                    float(df_resumo.iloc[0].get("Valor Parcelas com Valor Alterado", 0.0))
-                ]
-                ws.append(linha_val)
-
-                # Cabeçalho
-                for c in ws[1]:
-                    c.fill = header_fill
-                    c.font = header_font
-                    c.alignment = align_center
-                    c.border = border_all_double
-
-                # Linha 2 - quantidades
-                for c in ws[2]:
-                    c.alignment = align_center
-                    c.font = Font(bold=True)
-                    c.border = border_all_double
-
-                # Linha 3 - valores (mantém borda dupla superior)
-                for c in ws[3]:
-                    c.number_format = num_format
-                    c.font = font_value
-                    c.alignment = align_center
-                    c.border = Border(left=double_side, right=double_side, top=Side(style="double"), bottom=thin)
-
-            # Largura uniforme
-            for col in ws.columns:
-                ws.column_dimensions[get_column_letter(col[0].column)].width = 25
-
+                adjusted_width = (max_length + 2)
+                worksheet.column_dimensions[column].width = adjusted_width
     return output_stream
 
+
+def normalizar_valor_repasse(valor):
+    if valor is None:
+        return 0.0
+    if isinstance(valor, (int, float)):
+        return round(float(valor), 2)
+    s = str(valor).strip().replace("R$", "").replace(" ", "").replace("\xa0", "")
+    if "," in s and "." in s:
+        s = s.replace(".", "").replace(",", ".")
+    elif "," in s and "." not in s:
+        s = s.replace(",", ".")
+    else:
+        s = s.replace(",", "")
+    try:
+        return round(float(s), 2)
+    except:
+        return 0.0
+
+def copiar_formatacao(origem, destino):
+    if origem.has_style:
+        destino.font = copy(origem.font)
+        destino.border = copy(origem.border)
+        destino.fill = copy(origem.fill)
+        destino.number_format = copy(origem.number_format)
+        destino.protection = copy(origem.protection)
+        destino.alignment = copy(origem.alignment)
+
+def achar_coluna(sheet, nome_coluna):
+    for cell in sheet[1]:
+        if str(cell.value).strip().lower() == nome_coluna.lower():
+            return cell.column
+    return None
+
+def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
+    wb_out = Workbook()
+    ws_out = wb_out.active
+
+    for i, cell in enumerate(ws_diario[1], 1):
+        novo = ws_out.cell(row=1, column=i, value=cell.value)
+        copiar_formatacao(cell, novo)
+        ws_out.column_dimensions[openpyxl.utils.get_column_letter(i)].width = ws_diario.column_dimensions[
+            openpyxl.utils.get_column_letter(i)
+        ].width
+
+    if incluir_status:
+        col_status = len(ws_diario[1]) + 1
+        ws_out.cell(row=1, column=col_status, value="Status")
+
+    linha_out = 2
+    for linha_info in linhas:
+        if incluir_status:
+            linha, status = linha_info
+        else:
+            linha, status = linha_info, ""
+
+        if linha is None:
+            if incluir_status:
+                ws_out.cell(row=linha_out, column=col_status, value=status)
+            linha_out += 1
+            continue
+
+        for i, cell in enumerate(linha, 1):
+            novo = ws_out.cell(row=linha_out, column=i, value=cell.value)
+            if hasattr(cell, "value"):
+                copiar_formatacao(cell, novo)
+
+        if incluir_status:
+            ws_out.cell(row=linha_out, column=col_status, value=status)
+
+        linha_out += 1
+
+    if incluir_status:
+        ws_out.cell(row=linha_out + 1, column=1, value=f"Total divergentes: {len(linhas)}")
+
+    stream_out = io.BytesIO()
+    wb_out.save(stream_out)
+    stream_out.seek(0)
+    return stream_out
+
+
+def processar_repasse(diario_stream, sistema_stream):
+    wb_diario = load_workbook(diario_stream, data_only=True)
+    ws_diario = wb_diario.worksheets[0]
+
+    wb_sistema = load_workbook(sistema_stream, data_only=True)
+    ws_sistema = wb_sistema.worksheets[0]
+
+    col_eq_diario = achar_coluna(ws_diario, "EQL")
+    col_parcela_diario = achar_coluna(ws_diario, "Parcela")
+    col_principal_diario = 4
+    col_corrmonet_diario = 9
+
+    col_eq_sistema = achar_coluna(ws_sistema, "EQL")
+    col_parcela_sistema = achar_coluna(ws_sistema, "Parcela")
+    col_valor_sistema = achar_coluna(ws_sistema, "Valor")
+
+    if not all([col_eq_diario, col_parcela_diario, col_principal_diario, col_corrmonet_diario, col_eq_sistema, col_parcela_sistema, col_valor_sistema]):
+        raise ValueError("Não foi possível encontrar todas as colunas necessárias (EQL, Parcela, Valor, etc.)")
+
+    valores_diario = {}
+    contagem_diario = {}
+    for row in ws_diario.iter_rows(min_row=2, values_only=True):
+        eql = str(row[col_eq_diario - 1]).strip() if row[col_eq_diario - 1] else ""
+        parcela = str(row[col_parcela_diario - 1]).strip() if row[col_parcela_diario - 1] else ""
+        principal = normalizar_valor_repasse(row[col_principal_diario - 1]) if len(row) >= col_principal_diario else 0.0
+        correcao = normalizar_valor_repasse(row[col_corrmonet_diario - 1]) if len(row) >= col_corrmonet_diario else 0.0
+        total = round(principal + correcao, 2)
+
+        if eql and parcela:
+            chave_completa = (eql, parcela, principal, correcao)
+            chave_simples = (eql, parcela)
+            contagem_diario[chave_completa] = contagem_diario.get(chave_completa, 0) + 1
+            if chave_simples not in valores_diario:
+                valores_diario[chave_simples] = total
+
+    valores_sistema = {}
+    for row in ws_sistema.iter_rows(min_row=2, values_only=True):
+        eql = str(row[col_eq_sistema - 1]).strip() if row[col_eq_sistema - 1] else ""
+        parcela = str(row[col_parcela_sistema - 1]).strip() if row[col_parcela_sistema - 1] else ""
+        valor = normalizar_valor_repasse(row[col_valor_sistema - 1])
+
+        if eql and parcela:
+            chave_simples = (eql, parcela)
+            if chave_simples not in valores_sistema:
+                valores_sistema[chave_simples] = valor
+
+    iguais = []
+    divergentes = []
+    duplicados_vistos = set()
+
+    for row in ws_diario.iter_rows(min_row=2):
+        eql = str(row[col_eq_diario - 1].value).strip() if row[col_eq_diario - 1].value else ""
+        parcela = str(row[col_parcela_diario - 1].value).strip() if row[col_parcela_diario - 1].value else ""
+        principal = normalizar_valor_repasse(row[col_principal_diario - 1].value)
+        correcao = normalizar_valor_repasse(row[col_corrmonet_diario - 1].value)
+        chave_simples = (eql, parcela)
+        chave_completa = (eql, parcela, principal, correcao)
+
+        if not eql or not parcela:
+            continue
+
+        if contagem_diario.get(chave_completa, 0) > 1:
+            if chave_completa not in duplicados_vistos:
+                duplicados_vistos.add(chave_completa)
+            else:
+                divergentes.append((row, f"EQL {eql} Parcela {parcela} duplicada no diário (Principal={principal}, Correção={correcao})"))
+                continue
+
+        valor_diario = valores_diario.get(chave_simples, 0.0)
+        valor_sistema = valores_sistema.get(chave_simples)
+
+        if valor_sistema is None:
+            divergentes.append((row, f"EQL {eql} Parcela {parcela} não encontrada no sistema"))
+        elif abs(valor_diario - valor_sistema) <= 0.02:
+            iguais.append((row, ""))
+        else:
+            divergentes.append((row, f"Valor diferente (Diário={valor_diario:.2f} / Sistema={valor_sistema:.2f})"))
+
+    for chave in valores_sistema:
+        if chave not in valores_diario:
+            eql, parcela = chave
+            divergentes.append((None, f"EQL {eql} Parcela {parcela} presente no sistema, ausente no diário"))
+
+    iguais_stream = criar_planilha_saida(iguais, ws_diario, incluir_status=False)
+    divergentes_stream = criar_planilha_saida(divergentes, ws_diario, incluir_status=True)
+
+    return iguais_stream, divergentes_stream, len(iguais), len(divergentes)
+
+
 # ==== Rotas da Aplicação ====
+
 @app.route('/')
 def index():
     return manual_render_template('index.html')
@@ -570,21 +618,16 @@ def compare_files():
                 error_title="Erro ao ler o PDF",
                 error_message="Não foi possível extrair texto de um dos PDFs. Ele pode estar corrompido ou ser uma imagem.")
 
-        df_resumo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas = processar_comparativo(
+        df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas = processar_comparativo(
             texto_ant, texto_atu, modo_separacao, emp_fixo_boleto
         )
 
         output = io.BytesIO()
         dfs_to_excel = {
-            "Resumo": df_resumo,
-            "Lotes Adicionados": df_adicionados,
-            "Lotes Removidos": df_removidos,
-            "Divergências de Valor": df_divergencias,
-            "Parcelas Novas por Lote": df_parc_novas,
+            "Resumo": df_resumo_completo, "Lotes Adicionados": df_adicionados, "Lotes Removidos": df_removidos,
+            "Divergências de Valor": df_divergencias, "Parcelas Novas por Lote": df_parc_novas,
             "Parcelas Removidas por Lote": df_parc_removidas,
         }
-
-        # (opcional) os mesmos valores também podem ser exibidos no HTML da página de resultado, se quiser
         formatar_excel(output, dfs_to_excel)
         output.seek(0)
         
@@ -592,7 +635,7 @@ def compare_files():
         report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
         with open(report_path, 'wb') as f: f.write(output.getvalue())
         
-        resumo_dict = df_resumo.to_dict('records')[0]
+        resumo_dict = pd.Series(df_resumo_completo.set_index(' ')['LOTES']).to_dict()
 
         return manual_render_template('compare_results.html',
             resumo_lotes_mes_anterior=resumo_dict.get('Lotes Mês Anterior', 0),
@@ -612,6 +655,50 @@ def compare_files():
             error_title="Erro inesperado na comparação", 
             error_message=f"Ocorreu um erro grave durante a comparação dos arquivos. Detalhes: {e}")
 
+@app.route('/repasse', methods=['POST'])
+def repasse_file():
+    if 'diario_file' not in request.files or 'sistema_file' not in request.files:
+        return manual_render_template('error.html', status_code=400,
+            error_title="Arquivos faltando", 
+            error_message="Você precisa enviar os dois arquivos (Diário e Sistema) para a conciliação.")
+
+    file_diario = request.files['diario_file']
+    file_sistema = request.files['sistema_file']
+
+    if file_diario.filename == '' or file_sistema.filename == '':
+        return manual_render_template('error.html', status_code=400,
+            error_title="Arquivos faltando", 
+            error_message="Selecione os dois arquivos para conciliar.")
+    
+    try:
+        diario_stream = io.BytesIO(file_diario.read())
+        sistema_stream = io.BytesIO(file_sistema.read())
+
+        iguais_stream, divergentes_stream, count_iguais, count_divergentes = processar_repasse(diario_stream, sistema_stream)
+
+        zip_stream = io.BytesIO()
+        with zipfile.ZipFile(zip_stream, 'w', zipfile.ZIP_DEFLATED) as zf:
+            zf.writestr('iguais.xlsx', iguais_stream.getvalue())
+            zf.writestr('divergentes.xlsx', divergentes_stream.getvalue())
+        zip_stream.seek(0)
+        
+        report_filename = f"repasse_conciliado_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.zip"
+        report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
+        with open(report_path, 'wb') as f: f.write(zip_stream.getvalue())
+
+        return manual_render_template('repasse_results.html',
+            count_iguais=count_iguais,
+            count_divergentes=count_divergentes,
+            download_url=url_for('download_file', filename=report_filename)
+        )
+
+    except Exception as e:
+        traceback.print_exc()
+        return manual_render_template('error.html', status_code=500,
+            error_title="Erro inesperado na conciliação", 
+            error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {e}")
+
+
 @app.route('/download/<filename>')
 def download_file(filename):
     path = os.path.join(app.config['UPLOAD_FOLDER'], filename)
@@ -619,9 +706,3 @@ def download_file(filename):
 
 if __name__ == '__main__':
     app.run(debug=True, port=int(os.environ.get('PORT', 8080)))
-
-
-
-
-
-
