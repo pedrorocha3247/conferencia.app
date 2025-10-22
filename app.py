@@ -1,11 +1,10 @@
 # -*- coding: utf-8 -*-
-
 import os
 import sys
 import re
 import unicodedata
 import io
-import fitz
+import fitz  # PyMuPDF
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, request, send_file, url_for, make_response
@@ -290,7 +289,7 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     }
     df_resumo_completo = pd.DataFrame(resumo_financeiro_data)
     
-    return df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas
+    return df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
 
 def formatar_excel(output_stream, dfs: dict):
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -330,7 +329,6 @@ def formatar_excel(output_stream, dfs: dict):
                 worksheet.column_dimensions[column].width = adjusted_width
     return output_stream
 
-
 def normalizar_valor_repasse(valor):
     if valor is None:
         return 0.0
@@ -363,10 +361,14 @@ def achar_coluna(sheet, nome_coluna):
             return cell.column
     return None
 
+# ===================================================================
+# FUNÇÃO CORRIGIDA
+# ===================================================================
 def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out = Workbook()
     ws_out = wb_out.active
 
+    # Copia o cabeçalho
     for i, cell in enumerate(ws_diario[1], 1):
         novo = ws_out.cell(row=1, column=i, value=cell.value)
         if cell:
@@ -375,16 +377,16 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
             openpyxl.utils.get_column_letter(i)
         ].width
 
+    col_status = 0
     if incluir_status:
         col_status = len(list(ws_diario[1])) + 1
         ws_out.cell(row=1, column=col_status, value="Status")
 
     linha_out = 2
     for linha_info in linhas:
-        if incluir_status:
-            linha, status = linha_info
-        else:
-            linha, status = linha_info, ""
+        # CORREÇÃO 1: 'linhas' sempre contém 2-tuplas (dados, status)
+        # Removemos o if/else problemático daqui.
+        linha, status = linha_info 
 
         if linha is None:
             if incluir_status:
@@ -392,11 +394,17 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
             linha_out += 1
             continue
 
+        # CORREÇÃO 2: Loop robusto sugerido por você
         for i, cell in enumerate(linha, 1):
-            valor = cell.value if cell is not None else None
-            novo = ws_out.cell(row=linha_out, column=i, value=valor)
-            if cell is not None:
-                copiar_formatacao(cell, novo)
+            try:
+                # Se 'cell' for um obj Cell, usa .value. Se for um valor puro (str, int), usa 'cell'
+                valor = cell.value if hasattr(cell, "value") else cell
+                novo = ws_out.cell(row=linha_out, column=i, value=valor)
+                # Só copia formatação se 'cell' for um obj Cell
+                if hasattr(cell, "value"):
+                    copiar_formatacao(cell, novo)
+            except Exception as e:
+                print(f"[Aviso] Erro ao copiar célula {i} da linha {linha_out}: {e}")
 
         if incluir_status:
             ws_out.cell(row=linha_out, column=col_status, value=status)
@@ -410,7 +418,9 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out.save(stream_out)
     stream_out.seek(0)
     return stream_out
-
+# ===================================================================
+# FIM DA FUNÇÃO CORRIGIDA
+# ===================================================================
 
 def processar_repasse(diario_stream, sistema_stream):
     wb_diario = load_workbook(diario_stream, data_only=True)
@@ -462,6 +472,7 @@ def processar_repasse(diario_stream, sistema_stream):
     divergentes = []
     duplicados_vistos = set()
 
+    # Itera sobre as CÉLULAS (objetos) para poder copiar a formatação
     for row in ws_diario.iter_rows(min_row=2):
         celula_eql = row[col_eq_diario - 1]
         celula_parcela = row[col_parcela_diario - 1]
@@ -483,6 +494,7 @@ def processar_repasse(diario_stream, sistema_stream):
             if chave_completa not in duplicados_vistos:
                 duplicados_vistos.add(chave_completa)
             else:
+                # 'row' é uma tupla de Células
                 divergentes.append((row, f"EQL {eql} Parcela {parcela} duplicada no diário (Principal={principal}, Correção={correcao})"))
                 continue
 
@@ -490,22 +502,25 @@ def processar_repasse(diario_stream, sistema_stream):
         valor_sistema = valores_sistema.get(chave_simples)
 
         if valor_sistema is None:
+            # 'row' é uma tupla de Células
             divergentes.append((row, f"EQL {eql} Parcela {parcela} não encontrada no sistema"))
         elif abs(valor_diario - valor_sistema) <= 0.02:
+            # 'row' é uma tupla de Células
             iguais.append((row, ""))
         else:
+            # 'row' é uma tupla de Células
             divergentes.append((row, f"Valor diferente (Diário={valor_diario:.2f} / Sistema={valor_sistema:.2f})"))
 
     for chave in valores_sistema:
         if chave not in valores_diario:
             eql, parcela = chave
+            # 'None' aqui é o 'linha' (não há linha no diário)
             divergentes.append((None, f"EQL {eql} Parcela {parcela} presente no sistema, ausente no diário"))
 
     iguais_stream = criar_planilha_saida(iguais, ws_diario, incluir_status=False)
     divergentes_stream = criar_planilha_saida(divergentes, ws_diario, incluir_status=True)
 
     return iguais_stream, divergentes_stream, len(iguais), len(divergentes)
-
 
 @app.route('/')
 def index():
@@ -630,15 +645,15 @@ def compare_files():
                 error_title="Erro ao ler o PDF",
                 error_message="Não foi possível extrair texto de um dos PDFs. Ele pode estar corrompido ou ser uma imagem.")
 
-        df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas = processar_comparativo(
+        df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas = processar_comparativo(
             texto_ant, texto_atu, modo_separacao, emp_fixo_boleto
         )
 
         output = io.BytesIO()
         dfs_to_excel = {
             "Resumo": df_resumo_completo, "Lotes Adicionados": df_adicionados, "Lotes Removidos": df_removidos,
-            "Divergências de Valor": df_divergencias, "Parcelas Novas por Lote": df_parc_novas,
-            "Parcelas Removidas por Lote": df_parc_removidas,
+            "Divergências de Valor": df_divergencias, "Parcelas Novas por Lote": df_parcelas_novas,
+            "Parcelas Removidas por Lote": df_parcelas_removidas,
         }
         formatar_excel(output, dfs_to_excel)
         output.seek(0)
@@ -706,10 +721,15 @@ def repasse_file():
 
     except Exception as e:
         traceback.print_exc()
+        # Captura o erro 'tuple' object... se ele ocorrer aqui
+        if "'tuple' object has no attribute 'value'" in str(e):
+             error_message = f"Ocorreu um erro grave durante a análise. Detalhes: {e}. Isso indica que uma linha na planilha 'Diário' pode estar em um formato inesperado. Verifique a função 'criar_planilha_saida' no app.py."
+        else:
+             error_message = f"Ocorreu um erro grave durante a análise. Detalhes: {e}"
+        
         return manual_render_template('error.html', status_code=500,
             error_title="Erro inesperado na conciliação", 
-            error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {e}")
-
+            error_message=error_message)
 
 @app.route('/download/<filename>')
 def download_file(filename):
