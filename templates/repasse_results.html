@@ -14,13 +14,16 @@
 </head>
 <body>
 <div class="container-fluid mt-4 px-4" style="max-width: 800px;">
+
     <div class="d-flex justify-content-between align-items-center mb-4">
         <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logótipo da Empresa" class="header-logo company-logo">
         <a href="/" class="btn btn-secondary">Analisar Novamente</a>
     </div>
+
     <div class="card border-primary mb-4">
         <div class="card-body">
             <h5 class="card-title mb-3">Resumo da Conciliação de Repasse</h5>
+            
             <div class="row text-center">
                 <div class="col-md summary-item border-end border-secondary">
                     <strong>Itens Iguais</strong>
@@ -31,7 +34,9 @@
                     <div><span class="badge bg-danger fs-6 mt-1">__COUNT_DIVERGENTES__</span></div>
                 </div>
             </div>
+            
             <hr>
+            
             <a href="__DOWNLOAD_URL__" class="btn btn-primary">
                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-zip-fill" viewBox="0 0 16 16">
                   <path d="M.5 1a.5.5 0 0 0 0 1h1.114l.43 1.291A.5.5 0 0 0 2.5 4h.5a.5.5 0 0 0 .5-.5V3h.5a.5.5 0 0 0 .5-.5V2H6v1h.5a.5.5 0 0 0 .5-.5V2H7v1h.5a.5.5 0 0 0 .5-.5V2h.5a.5.5 0 0 0 .5-.5V1H.5zM6 4.5v1h.5a.5.5 0 0 0 .5-.5V4h-.5a.5.5 0 0 0-.5.5zM4.5 4v.5a.5.5 0 0 0 .5.5H5v-1h-.5a.5.5 0 0 0-.5.5zM3 4.5v1h.5a.5.5 0 0 0 .5-.5V4h-.5a.5.5 0 0 0-.5.5z"/>
@@ -42,7 +47,8 @@
             </a>
         </div>
     </div>
-    <div class="alert alert-info">
+
+    <div class="alert alert-secondary">
         <h4 class="alert-heading">Relatórios Gerados</h4>
         <p>O arquivo .zip contém duas planilhas:</p>
         <ul>
@@ -50,6 +56,7 @@
             <li><strong>divergentes.xlsx:</strong> Contém todas as linhas que apresentaram problemas, incluindo valores diferentes, itens duplicados no diário, ou itens que existem em uma planilha mas não na outra.</li>
         </ul>
     </div>
+
 </div>
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
