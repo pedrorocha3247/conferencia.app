@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resultados da Conciliação</title>
+    <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { padding-bottom: 50px; }
+        .card { border: none; }
+        .header-logo { max-height: 50px; width: auto; }
+        .summary-item strong { text-transform: uppercase; }
+    </style>
+</head>
+<body>
+<div class="container-fluid mt-4 px-4" style="max-width: 800px;">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logótipo da Empresa" class="header-logo company-logo">
+        <a href="/" class="btn btn-secondary">Analisar Novamente</a>
+    </div>
+
+    <div class="card border-primary mb-4">
+        <div class="card-body">
+            <h5 class="card-title mb-3">Resumo da Conciliação de Repasse</h5>
+            
+            <div class="row text-center">
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Itens Iguais</strong>
+                    <div><span class="badge bg-success fs-6 mt-1">__COUNT_IGUAIS__</span></div>
+                </div>
+                <div class="col-md summary-item">
+                    <strong>Itens Divergentes</strong>
+                    <div><span class="badge bg-danger fs-6 mt-1">__COUNT_DIVERGENTES__</span></div>
+                </div>
+            </div>
+            
+            <hr>
+            
+            <a href="__DOWNLOAD_URL__" class="btn btn-primary">
+                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" fill="currentColor" class="bi bi-file-earmark-zip-fill" viewBox="0 0 16 16">
+                  <path d="M.5 1a.5.5 0 0 0 0 1h1.114l.43 1.291A.5.5 0 0 0 2.5 4h.5a.5.5 0 0 0 .5-.5V3h.5a.5.5 0 0 0 .5-.5V2H6v1h.5a.5.5 0 0 0 .5-.5V2H7v1h.5a.5.5 0 0 0 .5-.5V2h.5a.5.5 0 0 0 .5-.5V1H.5zM6 4.5v1h.5a.5.5 0 0 0 .5-.5V4h-.5a.5.5 0 0 0-.5.5zM4.5 4v.5a.5.5 0 0 0 .5.5H5v-1h-.5a.5.5 0 0 0-.5.5zM3 4.5v1h.5a.5.5 0 0 0 .5-.5V4h-.5a.5.5 0 0 0-.5.5z"/>
+                  <path d="M8.5 9.438V8.5h-1v.938a1 1 0 0 0-.03.188l-1.014 2.84a.5.5 0 1 0 .948.337L8 10.533V12.5a.5.5 0 0 0 .5.5h1a.5.5 0 0 0 .5-.5v-1.967l.6.84a.5.5 0 1 0 .848-.567l-1.014-2.84a1 1 0 0 0-.03-.188z"/>
+                  <path d="M4 0h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2a2 2 0 0 1 2-2m6.5 1h-7a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V4.707A1 1 0 0 0 13.707 4L10.5.293A1 1 0 0 0 10.5 0M9.5 3.5v-2l3 3h-2a1 1 0 0 1-1-1"/>
+                </svg>
+                Baixar Relatório ZIP (Iguais e Divergentes)
+            </a>
+        </div>
+    </div>
+
+    <div class="alert alert-secondary">
+        <h4 class="alert-heading">Relatórios Gerados</h4>
+        <p>O arquivo .zip contém duas planilhas:</p>
+        <ul>
+            <li><strong>iguais.xlsx:</strong> Contém todas as linhas do arquivo "Diário" que correspondem exatamente aos valores do arquivo "Sistema".</li>
+            <li><strong>divergentes.xlsx:</strong> Contém todas as linhas que apresentaram problemas, incluindo valores diferentes, itens duplicados no diário, ou itens que existem em uma planilha mas não na outra.</li>
+        </ul>
+    </div>
+
+</div>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>
