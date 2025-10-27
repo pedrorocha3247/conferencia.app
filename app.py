@@ -342,62 +342,74 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     # =========================================
 
 def formatar_excel(output_stream, dfs: dict):
-    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side, NamedStyle
     from openpyxl.utils import get_column_letter
+    # Importar pandas aqui se ainda não estiver importado no escopo global
+    import pandas as pd
 
     with pd.ExcelWriter(output_stream, engine='openpyxl') as writer:
         for sheet_name, df in dfs.items():
-            # Garante que mesmo DataFrames vazios sejam tratados
             if df is None:
-                continue # Pula se o DataFrame for None
+                continue
             if isinstance(df, pd.DataFrame) and not df.empty:
-                 if sheet_name == "Resumo":
-                    df.to_excel(writer, index=False, sheet_name=sheet_name)
-                 else:
-                    df.to_excel(writer, index=False, sheet_name=sheet_name)
+                df.to_excel(writer, index=False, sheet_name=sheet_name)
             elif isinstance(df, pd.DataFrame) and df.empty:
-                 # Cria uma planilha vazia se o DataFrame estiver vazio mas não for None
+                 # Cria planilha vazia mas com nome
                  pd.DataFrame().to_excel(writer, sheet_name=sheet_name, index=False)
 
-
+        # Estilos (mantidos como antes)
         number_style = NamedStyle(name='br_number_style', number_format='#,##0.00')
         integer_style = NamedStyle(name='br_integer_style', number_format='0')
 
         for sheet_name in writer.sheets:
             worksheet = writer.sheets[sheet_name]
-            worksheet.sheet_view.showGridLines = False
-            
-            # Aplica formatação apenas se a planilha tiver dados
-            if worksheet.max_row > 1 or worksheet.max_column > 1 : # Verifica se há mais que o cabeçalho
-                for column_cells in worksheet.columns:
+            worksheet.sheet_view.showGridLines = False # Opcional: mantém sem linhas de grade
+
+            # Aplica formatação e largura apenas se a planilha tiver dados (cabeçalho + dados)
+            if worksheet.max_row > 1:
+                # Ajuste de largura e formatação numérica (mantido como antes)
+                for col_idx, column_cells in enumerate(worksheet.columns, 1):
                     max_length = 0
-                    column = column_cells[0].column_letter
+                    column = get_column_letter(col_idx) # Usa get_column_letter
                     is_first_row = True
                     for cell in column_cells:
-                        if is_first_row: # Pula a formatação do cabeçalho
-                            is_first_row = False
-                            if cell.value: # Calcula largura baseado no cabeçalho também
-                                max_length = max(max_length, len(str(cell.value)))
-                            continue
-
+                        # Calcula largura baseado no cabeçalho e nos dados
                         if cell.value:
-                            max_length = max(max_length, len(str(cell.value)))
+                             max_length = max(max_length, len(str(cell.value)))
 
-                        # Aplica estilo numérico apenas se for float ou int (exceto coluna B no Resumo)
-                        if isinstance(cell.value, float):
-                             cell.style = number_style
-                        elif isinstance(cell.value, int):
-                             if sheet_name == 'Resumo' and column == 'B': # Coluna LOTES no Resumo
-                                 cell.style = integer_style
-                             elif column != 'B': # Outras colunas int (se houver) formatar como número
-                                 cell.style = number_style # Ou manter como integer_style se preferir
+                        # Aplica estilos numéricos a partir da segunda linha
+                        if not is_first_row:
+                             if isinstance(cell.value, float):
+                                 cell.style = number_style
+                             elif isinstance(cell.value, int):
+                                 if sheet_name == 'Resumo' and column == 'B':
+                                     cell.style = integer_style
+                                 elif column != 'B': # Ajuste conforme necessidade
+                                     cell.style = number_style # Ou integer_style
+                        is_first_row = False
 
-                    adjusted_width = (max_length + 2)
+                    adjusted_width = (max_length + 2) * 1.2 # Fator de ajuste opcional
                     worksheet.column_dimensions[column].width = adjusted_width
-            else:
-                 # Define uma largura mínima para planilhas vazias, se desejar
-                 for col_idx in range(1, 5): # Ex: define largura para as 4 primeiras colunas
-                      worksheet.column_dimensions[get_column_letter(col_idx)].width = 15
+
+                # ===> ADICIONA O AUTOFILTRO <===
+                # Aplica o filtro a todo o range usado na planilha (assume cabeçalho na linha 1)
+                worksheet.auto_filter.ref = worksheet.dimensions
+                # ==============================
+
+            elif worksheet.max_row == 1 and worksheet.max_column > 0:
+                 # Se houver apenas cabeçalho, ainda aplica o filtro e ajusta largura
+                 for col_idx, column_cells in enumerate(worksheet.columns, 1):
+                       max_length = 0
+                       column = get_column_letter(col_idx)
+                       if column_cells[0].value: # Largura baseada apenas no cabeçalho
+                            max_length = max(max_length, len(str(column_cells[0].value)))
+                       adjusted_width = (max_length + 2) * 1.2
+                       worksheet.column_dimensions[column].width = adjusted_width
+                 # Aplica filtro apenas no cabeçalho
+                 worksheet.auto_filter.ref = worksheet.dimensions # Ou worksheet.calculate_dimension()
+
+            # Se a planilha estiver totalmente vazia (max_row=0 ou max_column=0), não faz nada
+
 
     return output_stream
 
@@ -441,69 +453,63 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out = Workbook()
     ws_out = wb_out.active
 
-    # Verifica se ws_diario tem pelo menos uma linha para copiar cabeçalho
+    # Copia o cabeçalho e larguras (mantido como antes)
     if ws_diario.max_row > 0:
         num_cols_header = ws_diario.max_column
         for i, cell in enumerate(ws_diario[1], 1):
             if cell:
                 novo = ws_out.cell(row=1, column=i, value=cell.value)
                 copiar_formatacao(cell, novo)
-                # Tenta copiar a largura da coluna, se existir
                 col_letter = get_column_letter(i)
                 if col_letter in ws_diario.column_dimensions:
                      ws_out.column_dimensions[col_letter].width = ws_diario.column_dimensions[col_letter].width
             else:
-                 ws_out.cell(row=1, column=i, value=None) # Cria célula vazia se original for None
+                 ws_out.cell(row=1, column=i, value=None)
     else:
-        num_cols_header = 0 # Define 0 se não há cabeçalho
+        num_cols_header = 0
 
     col_status = 0
     if incluir_status:
-        # Adiciona coluna Status mesmo se não houver cabeçalho original
         col_status = num_cols_header + 1
-        ws_out.cell(row=1, column=col_status, value="Status")
-        ws_out.column_dimensions[get_column_letter(col_status)].width = 25 # Define uma largura
+        cell_status_header = ws_out.cell(row=1, column=col_status, value="Status")
+        # Aplica um estilo básico ao cabeçalho do status
+        cell_status_header.font = Font(bold=True)
+        ws_out.column_dimensions[get_column_letter(col_status)].width = 30 # Largura para coluna Status
 
 
     linha_out = 2
+    # Copia os dados (mantido como antes)
     for linha_info in linhas:
         linha, status = linha_info
-
         if linha is None:
-            # Escreve apenas o status se a linha for None (item presente só no sistema)
             if incluir_status and col_status > 0:
                 ws_out.cell(row=linha_out, column=col_status, value=status)
             linha_out += 1
             continue
-
-        # Processa a linha (seja tupla de valores ou tupla de células)
         for i, cell_data in enumerate(linha, 1):
              try:
-                 # Lida com Célula ou Valor diretamente
                  valor = cell_data.value if hasattr(cell_data, "value") else cell_data
                  novo = ws_out.cell(row=linha_out, column=i, value=valor)
-                 # Copia formatação apenas se for uma Célula
                  if hasattr(cell_data, "value"):
                      copiar_formatacao(cell_data, novo)
              except Exception as e:
                   print(f"[Aviso] Erro ao processar célula {i} da linha {linha_out}: {e}. Valor: {cell_data}")
-                  ws_out.cell(row=linha_out, column=i, value=f"ERRO: {e}") # Marca erro na planilha
-
-
-        # Adiciona o status na coluna correspondente
+                  ws_out.cell(row=linha_out, column=i, value=f"ERRO: {e}")
         if incluir_status and col_status > 0:
              ws_out.cell(row=linha_out, column=col_status, value=status)
-
         linha_out += 1
 
-    # Adiciona contagem total no final da planilha de divergentes
     if incluir_status:
-         # Garante que a célula exista antes de escrever
          total_cell = ws_out.cell(row=linha_out + 1, column=1)
          total_cell.value = f"Total divergentes: {len(linhas)}"
-         # Aplica algum estilo básico, se desejado
          total_cell.font = Font(bold=True)
 
+    # ===> ADICIONA O AUTOFILTRO <===
+    # Aplica o filtro antes de salvar, apenas se houver cabeçalho
+    if ws_out.max_row > 0 and ws_out.max_column > 0:
+         ws_out.auto_filter.ref = ws_out.dimensions
+         print(f"[LOG] Autofilter aplicado à planilha de saída. Ref: {ws_out.dimensions}")
+    # ==============================
 
     stream_out = io.BytesIO()
     wb_out.save(stream_out)
@@ -1055,4 +1061,5 @@ if __name__ == '__main__':
     # host='0.0.0.0' é necessário para o Render acessar o app dentro do container
     print(f"Executando em http://0.0.0.0:{port} (debug={'True' if os.environ.get('FLASK_DEBUG') == '1' else 'False'})")
     app.run(debug=(os.environ.get('FLASK_DEBUG') == '1'), host='0.0.0.0', port=port)
+
 
