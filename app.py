@@ -69,8 +69,12 @@ BASE_FIXOS_CCB = {
 # =======================================
 
 app = Flask(__name__)
-app.config['UPLOAD_FOLDER'] = 'uploads'
+# Define UPLOAD_FOLDER como um caminho absoluto relativo à raiz do app
+UPLOAD_FOLDER_PATH = os.path.join(app.root_path, 'uploads')
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER_PATH
+# Cria o diretório usando o caminho absoluto
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
+print(f"Pasta de Upload configurada em: {app.config['UPLOAD_FOLDER']}") # Log para confirmar
 
 def manual_render_template(template_name, status_code=200, **kwargs):
     template_path = os.path.join(app.root_path, 'templates', template_name)
@@ -1051,3 +1055,4 @@ if __name__ == '__main__':
     # host='0.0.0.0' é necessário para o Render acessar o app dentro do container
     print(f"Executando em http://0.0.0.0:{port} (debug={'True' if os.environ.get('FLASK_DEBUG') == '1' else 'False'})")
     app.run(debug=(os.environ.get('FLASK_DEBUG') == '1'), host='0.0.0.0', port=port)
+
