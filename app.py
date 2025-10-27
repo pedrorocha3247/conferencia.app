@@ -1,21 +1,24 @@
 # -*- coding: utf-8 -*-
+
 import os
 import sys
 import re
 import unicodedata
 import io
-import fitz  # PyMuPDF
+import fitz
 import pandas as pd
 from collections import OrderedDict
 from flask import Flask, request, send_file, url_for, make_response
+from openpyxl.styles import NamedStyle, Alignment, Font, Border, Side
+from openpyxl.utils.dataframe import dataframe_to_rows
+from openpyxl.utils import get_column_letter
 import traceback
 import openpyxl
 from openpyxl import Workbook, load_workbook
-from openpyxl.styles import NamedStyle, Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
 from copy import copy
 import zipfile
 
+# ==== Constantes e Mapeamentos ====
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
 HEADERS = (
     "Remessa para Conferência", "Página", "Banco", "IMOBILIARIOS", "Débitos do Mês",
@@ -54,6 +57,14 @@ BASE_FIXOS = {
     "Contribuição ABRASMA - Bronze": [20.00],
     "Contribuição ABRASMA - Prata": [40.00],
     "Contribuição ABRASMA - Ouro": [60.00],
+}
+BASE_FIXOS_CCB = {
+    "Alienação Fiduciária CCB": [],
+    "Financiamento Realiza CCB": [],
+    "Encargos Não Pagos CCB": [],
+    "Débito por pagamento a menor CCB": [],
+    "Crédito por pagamento a maior CCB": [],
+    "Negociação Alienação CCB": []
 }
 
 app = Flask(__name__)
@@ -102,15 +113,22 @@ def to_float(s: str):
     except (ValueError, TypeError):
         return None
 
-def fixos_do_emp(emp: str):
-    if emp not in EMP_MAP:
+def fixos_do_emp(emp: str, modo_separacao: str):
+    if modo_separacao == 'boleto':
+        if emp not in EMP_MAP:
+            return BASE_FIXOS
+        f = dict(BASE_FIXOS)
+        if EMP_MAP.get(emp) and EMP_MAP[emp].get("Melhoramentos") is not None:
+            f["Melhoramentos"] = [float(EMP_MAP[emp]["Melhoramentos"])]
+        if EMP_MAP.get(emp) and EMP_MAP[emp].get("Fundo de Transporte") is not None:
+            f["Fundo de Transporte"] = [float(EMP_MAP[emp]["Fundo de Transporte"])]
+        return f
+    elif modo_separacao == 'debito_credito':
         return BASE_FIXOS
-    f = dict(BASE_FIXOS)
-    if EMP_MAP.get(emp) and EMP_MAP[emp].get("Melhoramentos") is not None:
-        f["Melhoramentos"] = [float(EMP_MAP[emp]["Melhoramentos"])]
-    if EMP_MAP.get(emp) and EMP_MAP[emp].get("Fundo de Transporte") is not None:
-        f["Fundo de Transporte"] = [float(EMP_MAP[emp]["Fundo de Transporte"])]
-    return f
+    elif modo_separacao == 'ccb_realiza':
+        return BASE_FIXOS_CCB
+    else:
+        return {}
 
 def detectar_emp_por_nome_arquivo(path: str):
     nome = os.path.splitext(os.path.basename(path))[0].upper()
@@ -213,55 +231,60 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
             emp_atual = detectar_emp_por_lote(lote)
         cliente = tentar_nome_cliente(bloco)
         itens = extrair_parcelas(bloco)
-        VALORES_CORRETOS = fixos_do_emp(emp_atual)
+        
+        VALORES_CORRETOS = fixos_do_emp(emp_atual, modo_separacao)
+        
         for rot, val in itens.items():
             linhas_todas.append({"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
+        
         cov = {"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente}
         for k in VALORES_CORRETOS.keys(): cov[k] = None
-for rot, val in itens.items():
-            if rot in VALORES_CORRETOS: cov[rot] = val
-        vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
-        cov["QtdParc_Alvo"] = len(vistos)
-        cov["Parc_Alvo"] = ", ".join(vistos)
-        linhas_cov.append(cov)
-        for rot in vistos:
-            val = cov[rot]
-            if val is None: continue
-            permitidos = VALORES_CORRETOS.get(rot, [])
-            if all(abs(val - v) > 1e-6 for v in permitidos):
-                linhas_div.append({
-                    "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
-                    "Parcela": rot, "Valor no Documento": float(val),
-                    "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
-                })
-    df_todas = pd.DataFrame(linhas_todas)
-    df_cov = pd.DataFrame(linhas_cov)
-    df_div = pd.DataFrame(linhas_div)
-    
-    return df_todas, df_cov, df_div
+        for rot, val in itens.items():
+            if rot in VALORES_CORRETOS: cov[rot] = val
+        
+        vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
+        cov["QtdParc_Alvo"] = len(vistos)
+        cov["Parc_Alvo"] = ", ".join(vistos)
+        linhas_cov.append(cov)
+
+        for rot in vistos:
+            val = cov[rot]
+            if val is None: continue
+            permitidos = VALORES_CORRETOS.get(rot, [])
+            if permitidos and all(abs(val - v) > 1e-6 for v in permitidos):
+                linhas_div.append({
+                    "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
+                    "Parcela": rot, "Valor no Documento": float(val),
+                    "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
+                })
+                
+    df_todas = pd.DataFrame(linhas_todas)
+    df_cov = pd.DataFrame(linhas_cov)
+    df_div = pd.DataFrame(linhas_div)
+    
+    return df_todas, df_cov, df_div
 
 def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_boleto):
-    df_todas_ant_raw, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
-    df_todas_atu_raw, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
-    
-    df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
-    df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
+    df_todas_ant_raw, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
+    df_todas_atu_raw, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
+    
+    df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
+    df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
 
-    # <<NOVA ALTERAÇÃO>>: Calcula o total do mês atual também
-    df_totais_atu = df_todas_atu_raw[df_todas_atu_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
-    df_totais_atu = df_totais_atu[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Atual'})
+    df_totais_atu = df_todas_atu_raw[df_todas_atu_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
+    df_totais_atu = df_totais_atu[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Atual'})
 
-    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
-    df_todas_ant = df_todas_ant_raw[~df_todas_ant_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
-    df_todas_atu = df_todas_atu_raw[~df_todas_atu_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
-    
-    df_todas_ant = df_todas_ant[~df_todas_ant['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
-    df_todas_atu = df_todas_atu[~df_todas_atu['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
+    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+    df_todas_ant = df_todas_ant_raw[~df_todas_ant_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
+    df_todas_atu = df_todas_atu_raw[~df_todas_atu_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
+    
+    df_todas_ant = df_todas_ant[~df_todas_ant['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
+    df_todas_atu = df_todas_atu[~df_todas_atu['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
 
-    df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
-    df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
+    df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
+    df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
 
-    df_comp = pd.merge(df_todas_ant, df_todas_atu, on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'], how='outer'
+    df_comp = pd.merge(df_todas_ant, df_todas_atu, on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'], how='outer')
     lotes_ant = df_todas_ant_raw[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_atu = df_todas_atu_raw[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='outer', indicator=True)
@@ -277,7 +300,6 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
     df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna() & pd.notna(df_comp['Valor Anterior'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
     
-
     total_adicionados_valor = df_adicionados['Total Atual'].sum()
     total_removidos_valor = df_removidos['Total Anterior'].sum()
     total_divergencias_valor = df_divergencias['Diferença'].sum()
@@ -288,15 +310,10 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
         ' ': ['Lotes Mês Anterior', 'Lotes Mês Atual', 'Lotes Adicionados', 'Lotes Removidos', 'Parcelas com Valor Alterado'],
         'LOTES': [len(lotes_ant), len(lotes_atu), len(df_adicionados), len(df_removidos), len(df_divergencias)],
         'TOTAIS': [total_mes_anterior_valor, total_mes_atual_valor, total_adicionados_valor, total_removidos_valor, total_divergencias_valor]
-=======
-    resumo = {
-        "Lotes Mês Anterior": len(lotes_ant), "Lotes Mês Atual": len(lotes_atu),
-        "Lotes Adicionados": len(df_adicionados), "Lotes Removidos": len(df_removidos),
-        "Parcelas com Valor Alterado": len(df_divergencias)
     }
     df_resumo_completo = pd.DataFrame(resumo_financeiro_data)
     
-    return df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
+    return df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas
 
 def formatar_excel(output_stream, dfs: dict):
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
@@ -336,6 +353,7 @@ def formatar_excel(output_stream, dfs: dict):
                 worksheet.column_dimensions[column].width = adjusted_width
     return output_stream
 
+
 def normalizar_valor_repasse(valor):
     if valor is None:
         return 0.0
@@ -368,14 +386,10 @@ def achar_coluna(sheet, nome_coluna):
             return cell.column
     return None
 
-# ===================================================================
-# FUNÇÃO CORRIGIDA
-# ===================================================================
 def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out = Workbook()
     ws_out = wb_out.active
 
-    # Copia o cabeçalho
     for i, cell in enumerate(ws_diario[1], 1):
         novo = ws_out.cell(row=1, column=i, value=cell.value)
         if cell:
@@ -384,16 +398,16 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
             openpyxl.utils.get_column_letter(i)
         ].width
 
-    col_status = 0
     if incluir_status:
         col_status = len(list(ws_diario[1])) + 1
         ws_out.cell(row=1, column=col_status, value="Status")
 
     linha_out = 2
     for linha_info in linhas:
-        # CORREÇÃO 1: 'linhas' sempre contém 2-tuplas (dados, status)
-        # Removemos o if/else problemático daqui.
-        linha, status = linha_info 
+        if incluir_status:
+            linha, status = linha_info
+        else:
+            linha, status = linha_info, ""
 
         if linha is None:
             if incluir_status:
@@ -401,17 +415,11 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
             linha_out += 1
             continue
 
-        # CORREÇÃO 2: Loop robusto sugerido por você
         for i, cell in enumerate(linha, 1):
-            try:
-                # Se 'cell' for um obj Cell, usa .value. Se for um valor puro (str, int), usa 'cell'
-                valor = cell.value if hasattr(cell, "value") else cell
-                novo = ws_out.cell(row=linha_out, column=i, value=valor)
-                # Só copia formatação se 'cell' for um obj Cell
-                if hasattr(cell, "value"):
-                    copiar_formatacao(cell, novo)
-            except Exception as e:
-                print(f"[Aviso] Erro ao copiar célula {i} da linha {linha_out}: {e}")
+            valor = cell.value if cell is not None else None
+            novo = ws_out.cell(row=linha_out, column=i, value=valor)
+            if cell is not None:
+                copiar_formatacao(cell, novo)
 
         if incluir_status:
             ws_out.cell(row=linha_out, column=col_status, value=status)
@@ -425,9 +433,7 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out.save(stream_out)
     stream_out.seek(0)
     return stream_out
-# ===================================================================
-# FIM DA FUNÇÃO CORRIGIDA
-# ===================================================================
+
 
 def processar_repasse(diario_stream, sistema_stream):
     wb_diario = load_workbook(diario_stream, data_only=True)
@@ -479,7 +485,6 @@ def processar_repasse(diario_stream, sistema_stream):
     divergentes = []
     duplicados_vistos = set()
 
-    # Itera sobre as CÉLULAS (objetos) para poder copiar a formatação
     for row in ws_diario.iter_rows(min_row=2):
         celula_eql = row[col_eq_diario - 1]
         celula_parcela = row[col_parcela_diario - 1]
@@ -501,7 +506,6 @@ def processar_repasse(diario_stream, sistema_stream):
             if chave_completa not in duplicados_vistos:
                 duplicados_vistos.add(chave_completa)
             else:
-                # 'row' é uma tupla de Células
                 divergentes.append((row, f"EQL {eql} Parcela {parcela} duplicada no diário (Principal={principal}, Correção={correcao})"))
                 continue
 
@@ -509,25 +513,22 @@ def processar_repasse(diario_stream, sistema_stream):
         valor_sistema = valores_sistema.get(chave_simples)
 
         if valor_sistema is None:
-            # 'row' é uma tupla de Células
             divergentes.append((row, f"EQL {eql} Parcela {parcela} não encontrada no sistema"))
         elif abs(valor_diario - valor_sistema) <= 0.02:
-            # 'row' é uma tupla de Células
             iguais.append((row, ""))
         else:
-            # 'row' é uma tupla de Células
             divergentes.append((row, f"Valor diferente (Diário={valor_diario:.2f} / Sistema={valor_sistema:.2f})"))
 
     for chave in valores_sistema:
         if chave not in valores_diario:
             eql, parcela = chave
-            # 'None' aqui é o 'linha' (não há linha no diário)
             divergentes.append((None, f"EQL {eql} Parcela {parcela} presente no sistema, ausente no diário"))
 
     iguais_stream = criar_planilha_saida(iguais, ws_diario, incluir_status=False)
     divergentes_stream = criar_planilha_saida(divergentes, ws_diario, incluir_status=True)
 
     return iguais_stream, divergentes_stream, len(iguais), len(divergentes)
+
 
 @app.route('/')
 def index():
@@ -652,15 +653,15 @@ def compare_files():
                 error_title="Erro ao ler o PDF",
                 error_message="Não foi possível extrair texto de um dos PDFs. Ele pode estar corrompido ou ser uma imagem.")
 
-        df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas = processar_comparativo(
+        df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parc_novas, df_parc_removidas = processar_comparativo(
             texto_ant, texto_atu, modo_separacao, emp_fixo_boleto
         )
 
         output = io.BytesIO()
         dfs_to_excel = {
             "Resumo": df_resumo_completo, "Lotes Adicionados": df_adicionados, "Lotes Removidos": df_removidos,
-            "Divergências de Valor": df_divergencias, "Parcelas Novas por Lote": df_parcelas_novas,
-            "Parcelas Removidas por Lote": df_parcelas_removidas,
+            "Divergências de Valor": df_divergencias, "Parcelas Novas por Lote": df_parc_novas,
+            "Parcelas Removidas por Lote": df_parc_removidas,
         }
         formatar_excel(output, dfs_to_excel)
         output.seek(0)
@@ -728,15 +729,10 @@ def repasse_file():
 
     except Exception as e:
         traceback.print_exc()
-        # Captura o erro 'tuple' object... se ele ocorrer aqui
-        if "'tuple' object has no attribute 'value'" in str(e):
-             error_message = f"Ocorreu um erro grave durante a análise. Detalhes: {e}. Isso indica que uma linha na planilha 'Diário' pode estar em um formato inesperado. Verifique a função 'criar_planilha_saida' no app.py."
-        else:
-             error_message = f"Ocorreu um erro grave durante a análise. Detalhes: {e}"
-        
         return manual_render_template('error.html', status_code=500,
             error_title="Erro inesperado na conciliação", 
-            error_message=error_message)
+            error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {e}")
+
 
 @app.route('/download/<filename>')
 def download_file(filename):
