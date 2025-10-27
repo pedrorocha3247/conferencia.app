@@ -218,49 +218,50 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
             linhas_todas.append({"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
         cov = {"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente}
         for k in VALORES_CORRETOS.keys(): cov[k] = None
-        for rot, val in itens.items():
-            if rot in VALORES_CORRETOS: cov[rot] = val
-        vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
-        cov["QtdParc_Alvo"] = len(vistos)
-        cov["Parc_Alvo"] = ", ".join(vistos)
-        linhas_cov.append(cov)
-        for rot in vistos:
-            val = cov[rot]
-            if val is None: continue
-            permitidos = VALORES_CORRETOS.get(rot, [])
-            if all(abs(val - v) > 1e-6 for v in permitidos):
-                linhas_div.append({
-                    "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
-                    "Parcela": rot, "Valor no Documento": float(val),
-                    "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
-                })
-    df_todas = pd.DataFrame(linhas_todas)
-    df_cov = pd.DataFrame(linhas_cov)
-    df_div = pd.DataFrame(linhas_div)
-    
-    return df_todas, df_cov, df_div
+for rot, val in itens.items():
+            if rot in VALORES_CORRETOS: cov[rot] = val
+        vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
+        cov["QtdParc_Alvo"] = len(vistos)
+        cov["Parc_Alvo"] = ", ".join(vistos)
+        linhas_cov.append(cov)
+        for rot in vistos:
+            val = cov[rot]
+            if val is None: continue
+            permitidos = VALORES_CORRETOS.get(rot, [])
+            if all(abs(val - v) > 1e-6 for v in permitidos):
+                linhas_div.append({
+                    "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
+                    "Parcela": rot, "Valor no Documento": float(val),
+                    "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
+                })
+    df_todas = pd.DataFrame(linhas_todas)
+    df_cov = pd.DataFrame(linhas_cov)
+    df_div = pd.DataFrame(linhas_div)
+    
+    return df_todas, df_cov, df_div
 
 def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_boleto):
-    df_todas_ant_raw, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
-    df_todas_atu_raw, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
-    
-    df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
-    df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
+    df_todas_ant_raw, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
+    df_todas_atu_raw, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
+    
+    df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
+    df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
 
-    df_totais_atu = df_todas_atu_raw[df_todas_atu_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
-    df_totais_atu = df_totais_atu[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Atual'})
+    # <<NOVA ALTERAÇÃO>>: Calcula o total do mês atual também
+    df_totais_atu = df_todas_atu_raw[df_todas_atu_raw['Parcela'].str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
+    df_totais_atu = df_totais_atu[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Atual'})
 
-    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
-    df_todas_ant = df_todas_ant_raw[~df_todas_ant_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
-    df_todas_atu = df_todas_atu_raw[~df_todas_atu_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
-    
-    df_todas_ant = df_todas_ant[~df_todas_ant['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
-    df_todas_atu = df_todas_atu[~df_todas_atu['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
+    parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS']
+    df_todas_ant = df_todas_ant_raw[~df_todas_ant_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
+    df_todas_atu = df_todas_atu_raw[~df_todas_atu_raw['Parcela'].str.strip().str.upper().isin(parcelas_para_remover)].copy()
+    
+    df_todas_ant = df_todas_ant[~df_todas_ant['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
+    df_todas_atu = df_todas_atu[~df_todas_atu['Parcela'].str.strip().str.upper().str.startswith('TOTAL BANCO')].copy()
 
-    df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
-    df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
+    df_todas_ant.rename(columns={'Valor': 'Valor Anterior'}, inplace=True)
+    df_todas_atu.rename(columns={'Valor': 'Valor Atual'}, inplace=True)
 
-    df_comp = pd.merge(df_todas_ant, df_todas_atu, on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'], how='outer')
+    df_comp = pd.merge(df_todas_ant, df_todas_atu, on=['Empreendimento', 'Lote', 'Cliente', 'Parcela'], how='outer'
     lotes_ant = df_todas_ant_raw[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_atu = df_todas_atu_raw[['Empreendimento', 'Lote', 'Cliente']].drop_duplicates()
     lotes_merged = pd.merge(lotes_ant, lotes_atu, on=['Empreendimento', 'Lote', 'Cliente'], how='outer', indicator=True)
@@ -276,6 +277,7 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_parcelas_novas = df_comp[df_comp['Valor Anterior'].isna() & pd.notna(df_comp['Valor Atual'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Atual']]
     df_parcelas_removidas = df_comp[df_comp['Valor Atual'].isna() & pd.notna(df_comp['Valor Anterior'])][['Empreendimento', 'Lote', 'Cliente', 'Parcela', 'Valor Anterior']]
     
+
     total_adicionados_valor = df_adicionados['Total Atual'].sum()
     total_removidos_valor = df_removidos['Total Anterior'].sum()
     total_divergencias_valor = df_divergencias['Diferença'].sum()
@@ -286,6 +288,11 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
         ' ': ['Lotes Mês Anterior', 'Lotes Mês Atual', 'Lotes Adicionados', 'Lotes Removidos', 'Parcelas com Valor Alterado'],
         'LOTES': [len(lotes_ant), len(lotes_atu), len(df_adicionados), len(df_removidos), len(df_divergencias)],
         'TOTAIS': [total_mes_anterior_valor, total_mes_atual_valor, total_adicionados_valor, total_removidos_valor, total_divergencias_valor]
+=======
+    resumo = {
+        "Lotes Mês Anterior": len(lotes_ant), "Lotes Mês Atual": len(lotes_atu),
+        "Lotes Adicionados": len(df_adicionados), "Lotes Removidos": len(df_removidos),
+        "Parcelas com Valor Alterado": len(df_divergencias)
     }
     df_resumo_completo = pd.DataFrame(resumo_financeiro_data)
     
