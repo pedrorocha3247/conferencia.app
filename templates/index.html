@@ -49,11 +49,32 @@
                 <form id="upload-form" action="/upload" method="post" enctype="multipart/form-data">
                     <div class="mb-3">
                         <label class="form-label fw-bold">1. Escolha o Modo de Análise:</label>
-                        <div class="form-check mb-2"><input class="form-check-input" type="radio" name="modo_separacao" id="modo_boleto" value="boleto" checked><label class="form-check-label" for="modo_boleto"><strong>Boleto</strong> <br><small class="text-muted">Analisa os arquivos referente às remessas de Boleto.</small></label></div>
-                        <div class="form-check"><input class="form-check-input" type="radio" name="modo_separacao" id="modo_debito_credito" value="debito_credito"><label class="form-check-label" for="modo_debito_credito"><strong>Débito/Crédito</strong> <br><small class="text-muted">Analisa os arquivos referente às remessas de Débito e Crédito.</small></label></div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="modo_separacao" id="modo_boleto" value="boleto" checked>
+                            <label class="form-check-label" for="modo_boleto">
+                                <strong>Boleto</strong> <br><small class="text-muted">Analisa os arquivos referente às remessas de Boleto.</small>
+                            </label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="modo_separacao" id="modo_debito_credito" value="debito_credito">
+                            <label class="form-check-label" for="modo_debito_credito">
+                                <strong>Débito/Crédito</strong> <br><small class="text-muted">Analisa os arquivos referente às remessas de Débito e Crédito.</small>
+                            </label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="modo_separacao" id="modo_ccb_realiza" value="ccb_realiza">
+                            <label class="form-check-label" for="modo_ccb_realiza">
+                                <strong>CCB/Realiza</strong> <br><small class="text-muted">Analisa os arquivos referente às remessas de CCB e Realiza.</small>
+                            </label>
+                        </div>
+                        </div>
+                    <div class="mb-3 mt-3">
+                        <label for="pdf_file" class="form-label fw-bold">2. Envie o Arquivo PDF:</label>
+                        <input type="file" class="form-control" name="pdf_file" id="pdf_file" accept=".pdf" required>
                     </div>
-                    <div class="mb-3 mt-3"><label for="pdf_file" class="form-label fw-bold">2. Envie o Arquivo PDF:</label><input type="file" class="form-control" name="pdf_file" id="pdf_file" accept=".pdf" required></div>
-                    <div class="d-grid mt-3"><button id="submit-button" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Validar Arquivo</span></button></div>
+                    <div class="d-grid mt-3">
+                        <button id="submit-button" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Validar Arquivo</span></button>
+                    </div>
                 </form>
             </div>
 
@@ -63,12 +84,30 @@
                 <form id="compare-form" action="/compare" method="post" enctype="multipart/form-data">
                     <div class="mb-3">
                         <label class="form-label fw-bold">1. Escolha o Modo de Análise:</label>
-                        <div class="form-check mb-2"><input class="form-check-input" type="radio" name="modo_separacao_comp" id="modo_boleto_comp" value="boleto" checked><label class="form-check-label" for="modo_boleto_comp"><strong>Boleto</strong></label></div>
-                        <div class="form-check"><input class="form-check-input" type="radio" name="modo_separacao_comp" id="modo_debito_credito_comp" value="debito_credito"><label class="form-check-label" for="modo_debito_credito_comp"><strong>Débito/Crédito</strong></label></div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="modo_separacao_comp" id="modo_boleto_comp" value="boleto" checked>
+                            <label class="form-check-label" for="modo_boleto_comp"><strong>Boleto</strong></label>
+                        </div>
+                        <div class="form-check mb-2">
+                            <input class="form-check-input" type="radio" name="modo_separacao_comp" id="modo_debito_credito_comp" value="debito_credito">
+                            <label class="form-check-label" for="modo_debito_credito_comp"><strong>Débito/Crédito</strong></label>
+                        </div>
+                        <div class="form-check">
+                            <input class="form-check-input" type="radio" name="modo_separacao_comp" id="modo_ccb_realiza_comp" value="ccb_realiza">
+                            <label class="form-check-label" for="modo_ccb_realiza_comp"><strong>CCB/Realiza</strong></label>
+                        </div>
+                         </div>
+                    <div class="mb-3 mt-3">
+                        <label for="pdf_mes_anterior" class="form-label fw-bold">2. Envie o Arquivo do Mês Anterior:</label>
+                        <input type="file" class="form-control" name="pdf_mes_anterior" id="pdf_mes_anterior" accept=".pdf" required>
                     </div>
-                    <div class="mb-3 mt-3"><label for="pdf_mes_anterior" class="form-label fw-bold">2. Envie o Arquivo do Mês Anterior:</label><input type="file" class="form-control" name="pdf_mes_anterior" id="pdf_mes_anterior" accept=".pdf" required></div>
-                    <div class="mb-3 mt-3"><label for="pdf_mes_atual" class="form-label fw-bold">3. Envie o Arquivo do Mês Atual:</label><input type="file" class="form-control" name="pdf_mes_atual" id="pdf_mes_atual" accept=".pdf" required></div>
-                    <div class="d-grid mt-3 mb-2"><button id="compare-button" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Comparar Arquivos</span></button></div>
+                    <div class="mb-3 mt-3">
+                        <label for="pdf_mes_atual" class="form-label fw-bold">3. Envie o Arquivo do Mês Atual:</label>
+                        <input type="file" class="form-control" name="pdf_mes_atual" id="pdf_mes_atual" accept=".pdf" required>
+                    </div>
+                    <div class="d-grid mt-3 mb-2">
+                        <button id="compare-button" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Comparar Arquivos</span></button>
+                    </div>
                 </form>
             </div>
 
@@ -106,17 +145,13 @@
                     }, 600);
                 }, 2000);
             }
-            
+
             function setupFormSubmitSpinner(formId, buttonId) {
                 const form = document.getElementById(formId);
                 const button = document.getElementById(buttonId);
                 if(form && button){
                     form.addEventListener('submit', function() {
-                        // ==================
-                        // AQUI ESTÁ A CORREÇÃO
-                        // ==================
-                        button.disabled = true; // Estava 'True' (Python) e agora é 'true' (JS)
-                        
+                        button.disabled = true; // Corrigido de 'True' para 'true'
                         const buttonText = button.querySelector('.button-text');
                         if (buttonText) {
                             buttonText.textContent = ' Processando...';
@@ -126,7 +161,7 @@
                     });
                 }
             }
-            
+
             setupFormSubmitSpinner('upload-form', 'submit-button');
             setupFormSubmitSpinner('compare-form', 'compare-button');
             setupFormSubmitSpinner('repasse-form', 'repasse-button');
