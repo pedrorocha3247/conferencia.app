@@ -518,184 +518,105 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
 
 
 def processar_repasse(diario_stream, sistema_stream):
-    print("📘 [LOG] Início de processar_repasse")
-    start_time = time.time()
-    
-    print("📘 [LOG] Carregando workbook 'Diário'...")
     wb_diario = load_workbook(diario_stream, data_only=True)
     ws_diario = wb_diario.worksheets[0]
-    print(f"📗 [LOG] 'Diário' carregado ({ws_diario.max_row} linhas). Tempo: {time.time() - start_time:.2f}s")
 
-
-    print("📘 [LOG] Carregando workbook 'Sistema'...")
     wb_sistema = load_workbook(sistema_stream, data_only=True)
     ws_sistema = wb_sistema.worksheets[0]
-    print(f"📗 [LOG] 'Sistema' carregado ({ws_sistema.max_row} linhas). Tempo: {time.time() - start_time:.2f}s")
 
-
-    print("📘 [LOG] Achando colunas...")
     col_eq_diario = achar_coluna(ws_diario, "EQL")
     col_parcela_diario = achar_coluna(ws_diario, "Parcela")
-    col_principal_diario = 4 # Assumindo coluna D
-    col_corrmonet_diario = 9 # Assumindo coluna I
+    col_principal_diario = 4
+    col_corrmonet_diario = 9
 
     col_eq_sistema = achar_coluna(ws_sistema, "EQL")
     col_parcela_sistema = achar_coluna(ws_sistema, "Parcela")
     col_valor_sistema = achar_coluna(ws_sistema, "Valor")
-    print(f"📗 [LOG] Colunas encontradas: Diário(EQL:{col_eq_diario}, Parc:{col_parcela_diario}), Sistema(EQL:{col_eq_sistema}, Parc:{col_parcela_sistema}, Val:{col_valor_sistema})")
 
+    if not all([col_eq_diario, col_parcela_diario, col_principal_diario, col_corrmonet_diario, col_eq_sistema, col_parcela_sistema, col_valor_sistema]):
+        raise ValueError("Não foi possível encontrar todas as colunas necessárias (EQL, Parcela, Valor, etc.)")
 
-    # Validação crítica das colunas encontradas
-    missing_cols = []
-    if not col_eq_diario: missing_cols.append("EQL (Diário)")
-    if not col_parcela_diario: missing_cols.append("Parcela (Diário)")
-    if not col_eq_sistema: missing_cols.append("EQL (Sistema)")
-    if not col_parcela_sistema: missing_cols.append("Parcela (Sistema)")
-    if not col_valor_sistema: missing_cols.append("Valor (Sistema)")
-
-    if missing_cols:
-         error_msg = f"Não foi possível encontrar as seguintes colunas obrigatórias: {', '.join(missing_cols)}. Verifique os nomes nos cabeçalhos das planilhas."
-         print(f"📕 [ERRO] {error_msg}")
-         raise ValueError(error_msg)
-
-
-    print("📘 [LOG] Início do Loop 1: Processando 'Diário' (values_only)...")
     valores_diario = {}
-    contagem_diario = {}
-    linhas_diario_count = 0
-    for i, row in enumerate(ws_diario.iter_rows(min_row=2, values_only=True)):
-        linhas_diario_count += 1
-        if i % 500 == 0 and i > 0:
-            print(f"➡️  [LOG] Processando linha {i+2} do Diário (Loop 1)...")
-
-        # Tratamento de erro mais robusto para acesso às colunas
-        eql = str(row[col_eq_diario - 1]).strip() if col_eq_diario <= len(row) and row[col_eq_diario - 1] else ""
-        parcela = str(row[col_parcela_diario - 1]).strip() if col_parcela_diario <= len(row) and row[col_parcela_diario - 1] else ""
-        principal = normalizar_valor_repasse(row[col_principal_diario - 1]) if col_principal_diario <= len(row) else 0.0
-        correcao = normalizar_valor_repasse(row[col_corrmonet_diario - 1]) if col_corrmonet_diario <= len(row) else 0.0
+    for row in ws_diario.iter_rows(min_row=2, values_only=True):
+        eql = str(row[col_eq_diario - 1]).strip() if row[col_eq_diario - 1] else ""
+        parcela = str(row[col_parcela_diario - 1]).strip() if row[col_parcela_diario - 1] else ""
+        principal = normalizar_valor_repasse(row[col_principal_diario - 1]) if len(row) >= col_principal_diario else 0.0
+        correcao = normalizar_valor_repasse(row[col_corrmonet_diario - 1]) if len(row) >= col_corrmonet_diario else 0.0
         total = round(principal + correcao, 2)
-
         if eql and parcela:
-            chave_completa = (eql, parcela, principal, correcao)
-            chave_simples = (eql, parcela)
-            contagem_diario[chave_completa] = contagem_diario.get(chave_completa, 0) + 1
-            if chave_simples not in valores_diario:
-                valores_diario[chave_simples] = total
-            # else: # Opcional: Logar se encontrar EQL+Parcela repetido
-            #     print(f"[AVISO] Chave EQL+Parcela duplicada no Diário: {chave_simples}. Usando primeiro valor {valores_diario[chave_simples]:.2f}.")
+            valores_diario[(eql, parcela)] = total
 
-    print(f"📗 [LOG] Fim do Loop 1. Dicionário 'Diário' criado com {linhas_diario_count} linhas processadas. {len(valores_diario)} chaves únicas (EQL+Parcela). Tempo: {time.time() - start_time:.2f}s")
-
-
-    print("📘 [LOG] Início do Loop 2: Processando 'Sistema'...")
     valores_sistema = {}
-    linhas_sistema_count = 0
-    for i, row in enumerate(ws_sistema.iter_rows(min_row=2, values_only=True)):
-        linhas_sistema_count += 1
-        if i % 500 == 0 and i > 0:
-            print(f"➡️  [LOG] Processando linha {i+2} do Sistema (Loop 2)...")
-
-        eql = str(row[col_eq_sistema - 1]).strip() if col_eq_sistema <= len(row) and row[col_eq_sistema - 1] else ""
-        parcela = str(row[col_parcela_sistema - 1]).strip() if col_parcela_sistema <= len(row) and row[col_parcela_sistema - 1] else ""
-        valor = normalizar_valor_repasse(row[col_valor_sistema - 1]) if col_valor_sistema <= len(row) else 0.0
-
-
+    for row in ws_sistema.iter_rows(min_row=2, values_only=True):
+        eql = str(row[col_eq_sistema - 1]).strip() if row[col_eq_sistema - 1] else ""
+        parcela = str(row[col_parcela_sistema - 1]).strip() if row[col_parcela_sistema - 1] else ""
+        valor = normalizar_valor_repasse(row[col_valor_sistema - 1])
         if eql and parcela:
-            chave_simples = (eql, parcela)
-            if chave_simples not in valores_sistema:
-                valores_sistema[chave_simples] = valor
-            # else: # Opcional: Logar se encontrar EQL+Parcela repetido
-            #      print(f"[AVISO] Chave EQL+Parcela duplicada no Sistema: {chave_simples}. Usando primeiro valor {valores_sistema[chave_simples]:.2f}.")
+            valores_sistema[(eql, parcela)] = valor
 
-    print(f"📗 [LOG] Fim do Loop 2. Dicionário 'Sistema' criado com {linhas_sistema_count} linhas processadas. {len(valores_sistema)} chaves únicas (EQL+Parcela). Tempo: {time.time() - start_time:.2f}s")
-
-
-
-    print("📘 [LOG] Início do Loop 3: Comparando 'Diário' (com células) com 'Sistema'...")
     iguais = []
     divergentes = []
-    duplicados_vistos = set()
-    linhas_diario_loop3 = 0
+    nao_encontrados = []
 
-    # Certifica-se de que há linhas para iterar além do cabeçalho
-    if ws_diario.max_row >= 2:
-         for row_idx, row_cells in enumerate(ws_diario.iter_rows(min_row=2)):
-             linhas_diario_loop3 += 1
-             current_row_num = row_idx + 2 # Número real da linha na planilha
-             if row_idx % 500 == 0 and row_idx > 0:
-                  print(f"➡️  [LOG] Processando linha {current_row_num} do Diário (Loop 3)...")
+    # Comparação principal
+    for row in ws_diario.iter_rows(min_row=2):
+        eql = str(row[col_eq_diario - 1].value).strip() if row[col_eq_diario - 1].value else ""
+        parcela = str(row[col_parcela_diario - 1].value).strip() if row[col_parcela_diario - 1].value else ""
+        principal = normalizar_valor_repasse(row[col_principal_diario - 1].value)
+        correcao = normalizar_valor_repasse(row[col_corrmonet_diario - 1].value)
+        total = principal + correcao
+        chave = (eql, parcela)
 
-             # Acessa células com segurança, verificando o índice
-             celula_eql = row_cells[col_eq_diario - 1] if col_eq_diario <= len(row_cells) else None
-             celula_parcela = row_cells[col_parcela_diario - 1] if col_parcela_diario <= len(row_cells) else None
-             celula_principal = row_cells[col_principal_diario - 1] if col_principal_diario <= len(row_cells) else None
-             celula_correcao = row_cells[col_corrmonet_diario - 1] if col_corrmonet_diario <= len(row_cells) else None
+        if not eql or not parcela:
+            continue
 
+        if chave not in valores_sistema:
+            nao_encontrados.append({
+                "Origem": "Diário",
+                "EQL": eql,
+                "Parcela": parcela,
+                "Valor (Diário)": total
+            })
+            continue
 
-             eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
-             parcela = str(celula_parcela.value).strip() if celula_parcela and celula_parcela.value is not None else ""
+        valor_sistema = valores_sistema[chave]
+        if abs(total - valor_sistema) <= 0.02:
+            iguais.append((row, ""))
+        else:
+            divergentes.append((row, f"Valor diferente (Diário={total:.2f} / Sistema={valor_sistema:.2f})"))
 
-             # Se EQL ou Parcela forem vazios/nulos nesta linha, pula para a próxima
-             if not eql or not parcela:
-                 print(f"[AVISO] Linha {current_row_num} do Diário ignorada (EQL ou Parcela vazio).")
-                 continue
+    # Itens do sistema que não estão no diário
+    for (eql, parcela), valor in valores_sistema.items():
+        if (eql, parcela) not in valores_diario:
+            nao_encontrados.append({
+                "Origem": "Sistema",
+                "EQL": eql,
+                "Parcela": parcela,
+                "Valor (Sistema)": valor
+            })
 
-             principal = normalizar_valor_repasse(celula_principal.value if celula_principal else None)
-             correcao = normalizar_valor_repasse(celula_correcao.value if celula_correcao else None)
-
-             chave_simples = (eql, parcela)
-             chave_completa = (eql, parcela, principal, correcao) # Chave com valores para checar duplicados exatos
-
-             # Verifica duplicidade exata (mesmo EQL, Parcela, Principal e Correção)
-             if contagem_diario.get(chave_completa, 0) > 1:
-                 # Se já vimos essa combinação exata antes
-                 if chave_completa in duplicados_vistos:
-                     divergentes.append((row_cells, f"EQL {eql} Parcela {parcela} duplicada no diário (Principal={principal:.2f}, Correção={correcao:.2f})"))
-                     continue # Pula para próxima linha do diário
-                 else:
-                     # Marca como vista, mas processa normalmente na primeira vez que aparece
-                     duplicados_vistos.add(chave_completa)
-                     # Poderia adicionar um aviso aqui se quisesse, mas continua o fluxo
-
-
-             # Comparação com dados do sistema
-             valor_diario_calculado = round(principal + correcao, 2) # Recalcula para garantir consistência
-             valor_sistema = valores_sistema.get(chave_simples) # Busca valor correspondente no sistema
-
-
-             if valor_sistema is None:
-                  divergentes.append((row_cells, f"EQL {eql} Parcela {parcela} não encontrada no sistema"))
-             elif abs(valor_diario_calculado - valor_sistema) <= 0.02: # Tolerância de 2 centavos
-                  iguais.append((row_cells, "")) # Adiciona a tupla de CÉLULAS
-             else:
-                  divergentes.append((row_cells, f"Valor diferente (Diário={valor_diario_calculado:.2f} / Sistema={valor_sistema:.2f})"))
-
-    else:
-          print("[AVISO] Planilha 'Diário' não contém dados (além do cabeçalho) para processar no Loop 3.")
-
-
-    print("📘 [LOG] Verificando itens presentes no 'Sistema' mas ausentes no 'Diário'...")
-    items_sistema_apenas = 0
-    for chave_simples_sistema, valor_sistema in valores_sistema.items():
-        if chave_simples_sistema not in valores_diario: # Compara com as chaves simples do diário
-            eql, parcela = chave_simples_sistema
-            # Adiciona None para 'linha' pois não há linha correspondente no diário
-            divergentes.append((None, f"EQL {eql} Parcela {parcela} presente no sistema (Valor={valor_sistema:.2f}), ausente no diário"))
-            items_sistema_apenas += 1
-    print(f"📗 [LOG] Fim do Loop 3 e verificação de ausentes. {linhas_diario_loop3} linhas do Diário processadas. {items_sistema_apenas} itens encontrados apenas no Sistema. Tempo total: {time.time() - start_time:.2f}s")
-
-
-    print("📘 [LOG] Criando planilha 'iguais.xlsx'...")
+    # === CRIAÇÃO DAS PLANILHAS ===
     iguais_stream = criar_planilha_saida(iguais, ws_diario, incluir_status=False)
-    print(f"📗 [LOG] Planilha 'iguais.xlsx' criada ({len(iguais)} linhas). Tempo: {time.time() - start_time:.2f}s")
-    
-    print("📘 [LOG] Criando planilha 'divergentes.xlsx'...")
     divergentes_stream = criar_planilha_saida(divergentes, ws_diario, incluir_status=True)
-    print(f"📗 [LOG] Planilha 'divergentes.xlsx' criada ({len(divergentes)} linhas). Tempo: {time.time() - start_time:.2f}s")
 
+    # Nova planilha: Não Encontrados
+    df_nao = pd.DataFrame(nao_encontrados)
+    output_nao = io.BytesIO()
+    with pd.ExcelWriter(output_nao, engine='openpyxl') as writer:
+        df_nao.to_excel(writer, index=False, sheet_name="Nao_Encontrados")
 
-    print(f"✅ [LOG] Fim de processar_repasse. Total {len(iguais)} iguais, {len(divergentes)} divergentes.")
-    return iguais_stream, divergentes_stream, len(iguais), len(divergentes)
+    # === CRIA PASTA E SALVA ===
+    pasta_saida = os.path.join(app.config['UPLOAD_FOLDER'], f"repasse_{pd.Timestamp.now().strftime('%Y-%m-%d_%H-%M-%S')}")
+    os.makedirs(pasta_saida, exist_ok=True)
+
+    with open(os.path.join(pasta_saida, "iguais.xlsx"), "wb") as f:
+        f.write(iguais_stream.getvalue())
+    with open(os.path.join(pasta_saida, "divergentes.xlsx"), "wb") as f:
+        f.write(divergentes_stream.getvalue())
+    with open(os.path.join(pasta_saida, "nao_encontrados.xlsx"), "wb") as f:
+        f.write(output_nao.getvalue())
+
+    return pasta_saida, len(iguais), len(divergentes), len(nao_encontrados)
 
 @app.route('/')
 def index():
@@ -1061,4 +982,5 @@ if __name__ == '__main__':
     # host='0.0.0.0' é necessário para o Render acessar o app dentro do container
     print(f"Executando em http://0.0.0.0:{port} (debug={'True' if os.environ.get('FLASK_DEBUG') == '1' else 'False'})")
     app.run(debug=(os.environ.get('FLASK_DEBUG') == '1'), host='0.0.0.0', port=port)
+
 
