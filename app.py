@@ -516,6 +516,18 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     stream_out.seek(0)
     return stream_out
 
+def salvar_stream_em_arquivo(stream, caminho):
+    """Salva tanto BytesIO quanto string diretamente em arquivo binário."""
+    with open(caminho, "wb") as f:
+        if hasattr(stream, "getvalue"):
+            f.write(stream.getvalue())
+        elif isinstance(stream, (bytes, bytearray)):
+            f.write(stream)
+        elif isinstance(stream, str):
+            f.write(stream.encode("utf-8"))
+        else:
+            raise TypeError(f"Tipo inesperado ao salvar stream: {type(stream)}")
+
 
 def processar_repasse(diario_stream, sistema_stream):
     wb_diario = load_workbook(diario_stream, data_only=True)
@@ -609,13 +621,12 @@ def processar_repasse(diario_stream, sistema_stream):
     pasta_saida = os.path.join(app.config['UPLOAD_FOLDER'], f"repasse_{pd.Timestamp.now().strftime('%Y-%m-%d_%H-%M-%S')}")
     os.makedirs(pasta_saida, exist_ok=True)
 
-    with open(os.path.join(pasta_saida, "iguais.xlsx"), "wb") as f:
-        f.write(iguais_stream.getvalue())
-    with open(os.path.join(pasta_saida, "divergentes.xlsx"), "wb") as f:
-        f.write(divergentes_stream.getvalue())
-    with open(os.path.join(pasta_saida, "nao_encontrados.xlsx"), "wb") as f:
-        f.write(output_nao.getvalue())
+    # Usa função segura para salvar todos os streams
+    salvar_stream_em_arquivo(iguais_stream, os.path.join(pasta_saida, "iguais.xlsx"))
+    salvar_stream_em_arquivo(divergentes_stream, os.path.join(pasta_saida, "divergentes.xlsx"))
+    salvar_stream_em_arquivo(output_nao, os.path.join(pasta_saida, "nao_encontrados.xlsx"))
 
+    print(f"📗 [LOG] Arquivos gerados na pasta: {pasta_saida}")
     return pasta_saida, len(iguais), len(divergentes), len(nao_encontrados)
 
 @app.route('/')
@@ -982,5 +993,6 @@ if __name__ == '__main__':
     # host='0.0.0.0' é necessário para o Render acessar o app dentro do container
     print(f"Executando em http://0.0.0.0:{port} (debug={'True' if os.environ.get('FLASK_DEBUG') == '1' else 'False'})")
     app.run(debug=(os.environ.get('FLASK_DEBUG') == '1'), host='0.0.0.0', port=port)
+
 
 
