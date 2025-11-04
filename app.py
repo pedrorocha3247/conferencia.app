@@ -440,12 +440,11 @@ def normalizar_valor_repasse(valor):
     if isinstance(valor, (int, float)):
         return round(float(valor), 2)
     s = str(valor).strip().replace("R$", "").replace(" ", "").replace("\xa0", "")
-    if "," in s and "." in s:
+    if "," in s and "." in s: # Formato 1.234,56
         s = s.replace(".", "").replace(",", ".")
-    elif "," in s and "." not in s:
+    elif "," in s and "." not in s: # Formato 1234,56
         s = s.replace(",", ".")
-    # else: # Assume que 1234.56 ou 1234 já está correto
-    #     s = s.replace(",", "") # Esta linha parecia errada, removida.
+    # Assume 1234.56 ou 1234
     try:
         return round(float(s), 2)
     except ValueError:
@@ -564,8 +563,8 @@ def processar_repasse(diario_stream, sistema_stream):
     print("📘 [LOG] Achando colunas (PickMoney)...")
     col_eq_diario = achar_coluna(ws_diario, "EQL")
     col_parcela_diario = achar_coluna(ws_diario, "Parcela")
-    col_principal_diario = 4 # Assumindo coluna D
-    col_corrmonet_diario = 9 # Assumindo coluna I
+    col_principal_diario = 4
+    col_corrmonet_diario = 9
 
     col_eq_sistema = achar_coluna(ws_sistema, "EQL")
     col_parcela_sistema = achar_coluna(ws_sistema, "Parcela")
@@ -590,8 +589,7 @@ def processar_repasse(diario_stream, sistema_stream):
     linhas_diario_count = 0
     for i, row in enumerate(ws_diario.iter_rows(min_row=2, values_only=True)):
         linhas_diario_count += 1
-        # if i % 500 == 0 and i > 0: print(f"➡️  [LOG] Processando linha {i+2} do Diário (Loop 1)...")
-
+        
         eql = str(row[col_eq_diario - 1]).strip() if col_eq_diario <= len(row) and row[col_eq_diario - 1] else ""
         parcela = str(row[col_parcela_diario - 1]).strip() if col_parcela_diario <= len(row) and row[col_parcela_diario - 1] else ""
         principal = normalizar_valor_repasse(row[col_principal_diario - 1]) if col_principal_diario <= len(row) else 0.0
@@ -612,7 +610,6 @@ def processar_repasse(diario_stream, sistema_stream):
     linhas_sistema_count = 0
     for i, row in enumerate(ws_sistema.iter_rows(min_row=2, values_only=True)):
         linhas_sistema_count += 1
-        # if i % 500 == 0 and i > 0: print(f"➡️  [LOG] Processando linha {i+2} do Sistema (Loop 2)...")
 
         eql = str(row[col_eq_sistema - 1]).strip() if col_eq_sistema <= len(row) and row[col_eq_sistema - 1] else ""
         parcela = str(row[col_parcela_sistema - 1]).strip() if col_parcela_sistema <= len(row) and row[col_parcela_sistema - 1] else ""
@@ -636,7 +633,6 @@ def processar_repasse(diario_stream, sistema_stream):
          for row_idx, row_cells in enumerate(ws_diario.iter_rows(min_row=2)):
              linhas_diario_loop3 += 1
              current_row_num = row_idx + 2
-             # if row_idx % 500 == 0 and row_idx > 0: print(f"➡️  [LOG] Processando linha {current_row_num} do Diário (Loop 3)...")
 
              celula_eql = row_cells[col_eq_diario - 1] if col_eq_diario <= len(row_cells) else None
              celula_parcela = row_cells[col_parcela_diario - 1] if col_parcela_diario <= len(row_cells) else None
@@ -711,7 +707,7 @@ def processar_repasse(diario_stream, sistema_stream):
 
 
 # =======================================================
-# === NOVA FUNÇÃO PARA ABRASMA ===
+# === FUNÇÃO ABRASMA CORRIGIDA ===
 # =======================================================
 def processar_repasse_abrasma(anterior_stream, complementar_stream):
     """Lógica de conciliação ABRASMA (Anterior vs Complementar) usando colunas EQL, Parc, Total Recebido."""
@@ -729,9 +725,8 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     print(f"📗 [LOG] 'Complementar' carregada ({ws_comp.max_row} linhas). Tempo: {time.time() - start_time:.2f}s")
 
     print("📘 [LOG] Achando colunas (ABRASMA)...")
-    # Colunas esperadas: "EQL", "Parc", "Total Recebido"
     col_eql_ant = achar_coluna(ws_ant, "EQL")
-    col_parc_ant = achar_coluna(ws_ant, "Parc") # Conforme solicitado
+    col_parc_ant = achar_coluna(ws_ant, "Parc")
     col_total_ant = achar_coluna(ws_ant, "Total Recebido")
 
     col_eql_comp = achar_coluna(ws_comp, "EQL")
@@ -740,7 +735,6 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
 
     print(f"📗 [LOG] Colunas encontradas: Anterior(EQL:{col_eql_ant}, Parc:{col_parc_ant}, Total:{col_total_ant}), Complementar(EQL:{col_eql_comp}, Parc:{col_parc_comp}, Total:{col_total_comp})")
 
-    # Validação das colunas
     missing_cols = []
     if not col_eql_ant: missing_cols.append("EQL (Anterior)")
     if not col_parc_ant: missing_cols.append("Parc (Anterior)")
@@ -755,8 +749,8 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
          raise ValueError(error_msg)
 
     print("📘 [LOG] Loop 1 (ABRASMA): Processando 'Anterior' (values_only)...")
-    valores_ant = {} # Chave: (eql, parc), Valor: total
-    contagem_ant = {} # Chave: (eql, parc, total), Valor: contagem
+    valores_ant = {}
+    contagem_ant = {}
     linhas_ant_count = 0
     for i, row in enumerate(ws_ant.iter_rows(min_row=2, values_only=True)):
         linhas_ant_count += 1
@@ -775,7 +769,7 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     print(f"📗 [LOG] Fim Loop 1. 'Anterior' processada ({linhas_ant_count} linhas). {len(valores_ant)} chaves. Tempo: {time.time() - start_time:.2f}s")
 
     print("📘 [LOG] Loop 2 (ABRASMA): Processando 'Complementar'...")
-    valores_comp = {} # Chave: (eql, parc), Valor: total
+    valores_comp = {}
     linhas_comp_count = 0
     for i, row in enumerate(ws_comp.iter_rows(min_row=2, values_only=True)):
         linhas_comp_count += 1
@@ -834,22 +828,55 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
         print("[AVISO] Planilha 'Anterior' sem dados para Loop 3.")
 
 
+    # --- INÍCIO DA CORREÇÃO ---
     print("📘 [LOG] Verificando itens da 'Complementar' ausentes na 'Anterior'...")
-    nao_encontrados_comp_formatado = []
+    nao_encontrados_comp_formatado = [] # Lista de tuplas (row_cells, status)
     items_comp_apenas = 0
-    for chave_simples_comp, valor_comp in valores_comp.items():
-        if chave_simples_comp not in valores_ant:
-            eql, parc = chave_simples_comp
-            status_msg = f"Presente na 'Complementar' (EQL {eql}, P {parc}, Valor={valor_comp:.2f}), Ausente na 'Anterior'"
-            nao_encontrados_comp_formatado.append((None, status_msg))
-            items_comp_apenas += 1
+    
+    # Otimização: Achar as chaves que precisamos (Complementar - Anterior)
+    chaves_comp_apenas = valores_comp.keys() - valores_ant.keys()
+    
+    if chaves_comp_apenas:
+        print(f"📘 [LOG] {len(chaves_comp_apenas)} itens exclusivos da 'Complementar' encontrados. Re-iterando 'Complementar' para buscar dados da linha...")
+        
+        # Precisamos re-iterar a planilha 'Complementar' para obter os objetos 'row_cells'
+        for row_cells_comp in ws_comp.iter_rows(min_row=2):
+            # Extrai a chave (EQL, Parc) desta linha
+            celula_eql = row_cells_comp[col_eql_comp - 1] if col_eql_comp <= len(row_cells_comp) else None
+            celula_parc = row_cells_comp[col_parc_comp - 1] if col_parc_comp <= len(row_cells_comp) else None
+            
+            eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
+            parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
+
+            chave_simples = (eql, parc)
+
+            # Se a chave desta linha é uma das que procuramos
+            if chave_simples in chaves_comp_apenas:
+                # Pega o valor total para incluir no status
+                celula_total = row_cells_comp[col_total_comp - 1] if col_total_comp <= len(row_cells_comp) else None
+                total_comp = normalizar_valor_repasse(celula_total.value if celula_total else None)
+                
+                status_msg = f"Presente na 'Complementar' (Valor={total_comp:.2f}), Ausente na 'Anterior'"
+                
+                # Adiciona a TUPLA DE CÉLULAS (row_cells_comp) e a mensagem de status
+                nao_encontrados_comp_formatado.append((row_cells_comp, status_msg))
+                
+                # Otimização: remove a chave do set para não procurar mais
+                chaves_comp_apenas.remove(chave_simples) 
+                
+                # Otimização: se já achamos todas, para de iterar a planilha
+                if not chaves_comp_apenas:
+                    break 
+    
+    items_comp_apenas = len(nao_encontrados_comp_formatado)
+    # --- FIM DA CORREÇÃO ---
 
     print(f"📗 [LOG] Fim Comparação ABRASMA. {linhas_ant_loop3} linhas 'Anterior'. {len(nao_encontrados_anterior)} não encontradas. {items_comp_apenas} só na 'Complementar'. Tempo: {time.time() - start_time:.2f}s")
 
     print("📘 [LOG] Criando planilhas de saída (ABRASMA)...")
-    # Usa ws_ant (Planilha Anterior) como modelo para cabeçalho e formatação
     iguais_stream = criar_planilha_saida(iguais, ws_ant, incluir_status=False)
     divergentes_stream = criar_planilha_saida(divergentes, ws_ant, incluir_status=True)
+    # Combina as duas listas de "não encontrados"
     nao_encontrados_combinados = nao_encontrados_anterior + nao_encontrados_comp_formatado
     nao_encontrados_stream = criar_planilha_saida(nao_encontrados_combinados, ws_ant, incluir_status=True)
 
@@ -870,230 +897,6 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     count_nao_encontrados = len(nao_encontrados_combinados)
     print(f"✅ [LOG] Fim de processar_repasse (ABRASMA). Totais: Iguais={len(iguais)}, Divergentes={len(divergentes)}, Não Encontrados={count_nao_encontrados}. Tempo total: {time.time() - start_time:.2f}s")
     return pasta_saida, len(iguais), len(divergentes), count_nao_encontrados
-# =======================================================
-# === FIM DA NOVA FUNÇÃO ===
-# =======================================================
-
-
-# ==== ROTAS FLASK ====
-
-@app.route('/')
-def index():
-    return manual_render_template('index.html')
-
-
-@app.route('/upload', methods=['POST'])
-def upload_file():
-    if 'pdf_file' not in request.files or request.files['pdf_file'].filename == '':
-        return manual_render_template('error.html', status_code=400,
-            error_title="Nenhum arquivo enviado",
-            error_message="Você precisa selecionar um arquivo PDF para fazer a análise.")
-
-    file = request.files['pdf_file']
-    modo_separacao = request.form.get('modo_separacao', 'boleto')
-
-    try:
-        emp_fixo = None
-        if modo_separacao == 'boleto':
-            emp_fixo = detectar_emp_por_nome_arquivo(file.filename)
-            if not emp_fixo:
-                error_msg = ("Para o modo 'Boleto', o nome do arquivo precisa terminar com um código de empreendimento válido (ex: 'Extrato_RSCI.pdf'). "
-                             "Verifique o nome do arquivo ou selecione outro modo de análise.")
-                return manual_render_template('error.html', status_code=400,
-                    error_title="Empreendimento não identificado (Modo Boleto)", error_message=error_msg)
-
-        elif modo_separacao in ['debito_credito', 'ccb_realiza']:
-             if detectar_emp_por_nome_arquivo(file.filename) and modo_separacao == 'debito_credito':
-                  error_msg = ("Este arquivo parece ser do tipo 'Boleto' (termina com código de empreendimento), mas o modo 'Débito/Crédito' foi selecionado. "
-                               "Por favor, use o modo 'Boleto' ou renomeie o arquivo se ele não for específico de um empreendimento.")
-                  return manual_render_template('error.html', status_code=400,
-                                                error_title="Modo de Análise Incorreto?", error_message=error_msg)
-
-        print(f"Iniciando validação para o arquivo '{file.filename}' no modo '{modo_separacao}'...")
-        pdf_stream = file.read()
-        texto_pdf = extrair_texto_pdf(pdf_stream)
-        if not texto_pdf:
-            print(f"Falha ao extrair texto do PDF: {file.filename}")
-            return manual_render_template('error.html', status_code=500,
-                error_title="Erro ao ler o PDF",
-                error_message="Não foi possível extrair o texto do arquivo enviado. Ele pode estar corrompido, ser uma imagem ou estar vazio.")
-
-        print("Texto extraído, processando validação...")
-        df_todas_raw, df_cov, df_div = processar_pdf_validacao(texto_pdf, modo_separacao, emp_fixo)
-        print(f"Validação concluída. {len(df_cov)} lotes/registros encontrados, {len(df_div)} divergências.")
-
-        df_todas_filtrado = df_todas_raw.copy()
-        if not df_todas_filtrado.empty:
-            parcelas_para_remover = ['TOTAL A PAGAR', 'DESCONTO', 'DÉBITOS DO MÊS ANTERIOR', 'ENCARGOS POR ATRASO', 'PAGAMENTO EFETUADO', 'DÉBITOS DO MÊS']
-            df_todas_filtrado = df_todas_filtrado[~df_todas_filtrado['Parcela'].astype(str).str.strip().str.upper().isin(parcelas_para_remover)]
-            df_todas_filtrado = df_todas_filtrado[~df_todas_filtrado['Parcela'].astype(str).str.strip().str.upper().str.startswith('TOTAL BANCO')]
-        print("Parcelas indesejadas filtradas da aba 'Todas_Parcelas_Extraidas'.")
-
-        output = io.BytesIO()
-        dfs_to_excel = {"Divergencias": df_div, "Cobertura_Analise": df_cov, "Todas_Parcelas_Extraidas": df_todas_filtrado}
-        print("Gerando arquivo Excel...")
-        formatar_excel(output, dfs_to_excel) # Chama a função formatar_excel com autofiltro
-        output.seek(0)
-        print("Arquivo Excel gerado em memória.")
-
-        base_name = os.path.splitext(file.filename)[0]
-        report_filename = f"relatorio_{modo_separacao}_{base_name}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
-
-        try:
-            with open(report_path, 'wb') as f: f.write(output.getvalue())
-            print(f"Relatório salvo em: {report_path}")
-        except Exception as e_save:
-            print(f"Erro ao salvar o arquivo Excel em {report_path}: {e_save}")
-
-        nao_classificados = 0
-        if not df_cov.empty and 'Empreendimento' in df_cov.columns:
-            nao_classificados = df_cov[df_cov['Empreendimento'] == 'NAO_CLASSIFICADO'].shape[0]
-            if nao_classificados > 0: print(f"[AVISO] {nao_classificados} registros não classificados.")
-
-        print("Renderizando página de resultados...")
-        return manual_render_template('results.html',
-            divergencias_json=df_div.to_json(orient='split', index=False, date_format='iso') if not df_div.empty else 'null',
-            total_lotes=len(df_cov),
-            total_divergencias=len(df_div),
-            nao_classificados=nao_classificados,
-            download_url=url_for('download_file', filename=report_filename),
-            modo_usado=modo_separacao.replace('_', '/').upper()
-        )
-
-    except Exception as e:
-        print(f"📕 [ERRO FATAL] Erro inesperado na rota /upload: {e}")
-        traceback.print_exc()
-        return manual_render_template('error.html', status_code=500,
-            error_title="Erro inesperado no processamento",
-            error_message=f"Ocorreu um erro grave durante a análise do arquivo '{file.filename}'. Detalhes: {e}")
-
-@app.route('/compare', methods=['POST'])
-def compare_files():
-    if 'pdf_mes_anterior' not in request.files or 'pdf_mes_atual' not in request.files:
-        return manual_render_template('error.html', status_code=400,
-            error_title="Arquivos faltando",
-            error_message="Ambos os arquivos PDF (mês anterior e atual) são necessários para a comparação.")
-
-    file_ant = request.files['pdf_mes_anterior']
-    file_atu = request.files['pdf_mes_atual']
-    modo_separacao = request.form.get('modo_separacao_comp', 'boleto')
-
-    if file_ant.filename == '' or file_atu.filename == '':
-        return manual_render_template('error.html', status_code=400,
-            error_title="Arquivos faltando",
-            error_message="Selecione os dois arquivos PDF para comparar.")
-
-    if not file_ant.filename.lower().endswith('.pdf') or not file_atu.filename.lower().endswith('.pdf'):
-         return manual_render_template('error.html', status_code=400,
-            error_title="Tipo de Arquivo Inválido",
-            error_message="Por favor, envie apenas arquivos no formato PDF para comparação.")
-
-
-    try:
-        emp_fixo_boleto = None
-        if modo_separacao == 'boleto':
-            emp_ant = detectar_emp_por_nome_arquivo(file_ant.filename)
-            emp_atu = detectar_emp_por_nome_arquivo(file_atu.filename)
-            if not emp_ant or not emp_atu:
-                return manual_render_template('error.html', status_code=400,
-                    error_title="Empreendimento não identificado (Modo Boleto)",
-                    error_message="Para o modo 'Boleto', o nome de ambos os arquivos PDF precisa terminar com um código de empreendimento válido.")
-            if emp_ant != emp_atu:
-                return manual_render_template('error.html', status_code=400,
-                    error_title="Empreendimentos diferentes (Modo Boleto)",
-                    error_message=f"Os arquivos devem ser do mesmo empreendimento para comparação no modo Boleto (Detectado: '{emp_ant}' e '{emp_atu}').")
-            emp_fixo_boleto = emp_ant
-
-        elif modo_separacao in ['debito_credito', 'ccb_realiza']:
-             if detectar_emp_por_nome_arquivo(file_ant.filename) or detectar_emp_por_nome_arquivo(file_atu.filename):
-                  error_msg = (f"Um dos arquivos parece ser do tipo 'Boleto' (termina com código), mas o modo '{modo_separacao.replace('_','/').upper()}' foi selecionado. "
-                               "Use o modo 'Boleto' para esses arquivos ou renomeie-os se a detecção estiver incorreta.")
-                  return manual_render_template('error.html', status_code=400,
-                                                error_title="Modo de Análise Incorreto?", error_message=error_msg)
-
-        print(f"Iniciando comparação modo '{modo_separacao}' entre '{file_ant.filename}' e '{file_atu.filename}'...")
-        texto_ant = extrair_texto_pdf(file_ant.read())
-        texto_atu = extrair_texto_pdf(file_atu.read())
-
-        if not texto_ant or not texto_atu:
-            err_msg = "Não foi possível extrair texto de um ou ambos os PDFs. "
-            if not texto_ant and not texto_atu: err_msg += "Ambos os arquivos falharam."
-            elif not texto_ant: err_msg += f"Falha ao ler '{file_ant.filename}'."
-            else: err_msg += f"Falha ao ler '{file_atu.filename}'."
-            err_msg += " Verifique se não estão corrompidos ou se são imagens."
-            print(f"[ERRO] {err_msg}")
-            return manual_render_template('error.html', status_code=500,
-                error_title="Erro ao ler PDF na Comparação", error_message=err_msg)
-
-        print("Textos extraídos. Processando comparação...")
-        df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas = processar_comparativo(
-            texto_ant, texto_atu, modo_separacao, emp_fixo_boleto
-        )
-        print(f"Comparação concluída. Resumo: {len(df_adicionados)} adicionados, {len(df_removidos)} removidos, {len(df_divergencias)} divergências.")
-
-
-        output = io.BytesIO()
-        dfs_to_excel = {
-            "Resumo": df_resumo_completo,
-            "Lotes Adicionados": df_adicionados,
-            "Lotes Removidos": df_removidos,
-            "Divergências de Valor": df_divergencias,
-            "Parcelas Novas por Lote": df_parcelas_novas,
-            "Parcelas Removidas por Lote": df_parcelas_removidas,
-        }
-        print("Gerando arquivo Excel do comparativo...")
-        formatar_excel(output, dfs_to_excel) # Chama a função formatar_excel com autofiltro
-        output.seek(0)
-        print("Arquivo Excel gerado em memória.")
-
-        report_filename = f"comparativo_{modo_separacao}_{pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')}.xlsx"
-        report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
-        try:
-            with open(report_path, 'wb') as f:
-                f.write(output.getvalue())
-            print(f"Relatório comparativo salvo em: {report_path}")
-        except Exception as e_save:
-             print(f"Erro ao salvar o arquivo Excel comparativo em {report_path}: {e_save}")
-
-
-        resumo_dict_lotes = {}
-        resumo_dict_totais = {}
-        if not df_resumo_completo.empty:
-             resumo_dict_lotes = pd.Series(df_resumo_completo.set_index(' ')['LOTES']).to_dict()
-             resumo_dict_totais = pd.Series(df_resumo_completo.set_index(' ')['TOTAIS']).map('{:,.2f}'.format).to_dict()
-
-
-        print("Renderizando página de resultados da comparação...")
-        return manual_render_template('compare_results.html',
-             resumo_lotes_mes_anterior=resumo_dict_lotes.get('Lotes Mês Anterior', 0),
-             resumo_lotes_mes_atual=resumo_dict_lotes.get('Lotes Mês Atual', 0),
-             resumo_lotes_adicionados=resumo_dict_lotes.get('Lotes Adicionados', 0),
-             resumo_lotes_removidos=resumo_dict_lotes.get('Lotes Removidos', 0),
-             resumo_parcelas_com_valor_alterado=resumo_dict_lotes.get('Parcelas com Valor Alterado', 0),
-
-             total_mes_anterior_str=resumo_dict_totais.get('Lotes Mês Anterior', '0.00'),
-             total_mes_atual_str=resumo_dict_totais.get('Lotes Mês Atual', '0.00'),
-             total_adicionados_str=resumo_dict_totais.get('Lotes Adicionados', '0.00'),
-             total_removidos_str=resumo_dict_totais.get('Lotes Removidos', '0.00'),
-             total_diferencas_str=resumo_dict_totais.get('Parcelas com Valor Alterado', '0.00'),
-
-            divergencias_json=df_divergencias.to_json(orient='split', index=False, date_format='iso') if not df_divergencias.empty else 'null',
-            adicionados_json=df_adicionados.to_json(orient='split', index=False, date_format='iso') if not df_adicionados.empty else 'null',
-            removidos_json=df_removidos.to_json(orient='split', index=False, date_format='iso') if not df_removidos.empty else 'null',
-
-            download_url=url_for('download_file', filename=report_filename),
-            modo_usado=modo_separacao.replace('_', '/').upper()
-        )
-
-
-    except Exception as e:
-        print(f"📕 [ERRO FATAL] Erro inesperado na rota /compare: {e}")
-        traceback.print_exc()
-        error_details = f"{type(e).__name__}: {e}"
-        return manual_render_template('error.html', status_code=500,
-            error_title="Erro inesperado na comparação",
-            error_message=f"Ocorreu um erro grave durante a comparação dos arquivos. Detalhes: {error_details}")
 
 
 @app.route('/repasse', methods=['POST'])
@@ -1133,7 +936,6 @@ def repasse_file():
         sistema_stream = io.BytesIO(file_sistema.read())
         print(f"📘 [LOG] Arquivos Excel (PickMoney) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
 
-        # Chama a função de processamento ORIGINAL do PickMoney
         pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse(diario_stream, sistema_stream)
 
         print(f"📘 [LOG] Processamento (PickMoney) concluído. Criando ZIP da pasta '{pasta_saida}'...")
@@ -1189,9 +991,6 @@ def repasse_file():
             error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {error_details}")
 
 
-# =======================================================
-# === NOVA ROTA PARA ABRASMA ===
-# =======================================================
 @app.route('/repasse_abrasma', methods=['POST'])
 def repasse_abrasma_file():
     """Rota para a conciliação ABRASMA (Anterior vs Complementar)"""
@@ -1263,7 +1062,6 @@ def repasse_abrasma_file():
              raise e_save
 
         print("✅ [LOG] Enviando resposta (ABRASMA) para 'repasse_results.html'")
-        # Reutiliza o mesmo template de resultados
         return manual_render_template('repasse_results.html',
             count_iguais=count_iguais,
             count_divergentes=count_divergentes,
@@ -1271,7 +1069,7 @@ def repasse_abrasma_file():
             download_url=url_for('download_file', filename=report_filename)
         )
 
-    except ValueError as ve: # Captura erros de coluna ABRASMA não encontrada
+    except ValueError as ve:
          print(f"📕 [ERRO VALIDAÇÃO ABRASMA] {ve}")
          traceback.print_exc()
          return manual_render_template('error.html', status_code=400,
@@ -1284,9 +1082,6 @@ def repasse_abrasma_file():
         return manual_render_template('error.html', status_code=500,
             error_title="Erro inesperado na conciliação (ABRASMA)",
             error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {error_details}")
-# =======================================================
-# === FIM DA NOVA ROTA ===
-# =======================================================
 
 
 @app.route('/download/<filename>')
@@ -1295,6 +1090,7 @@ def download_file(filename):
      normalized_safe_path = os.path.normpath(safe_path)
      normalized_upload_folder = os.path.normpath(app.config['UPLOAD_FOLDER'])
 
+     # Adiciona 'os.sep' para garantir que não pegue pastas com nome parecido
      if not normalized_safe_path.startswith(normalized_upload_folder + os.sep) and normalized_safe_path != normalized_upload_folder :
          print(f" Tentativa de acesso a caminho inválido: {filename} (Normalizado: {normalized_safe_path} vs Base: {normalized_upload_folder})")
          return "Acesso negado.", 403
