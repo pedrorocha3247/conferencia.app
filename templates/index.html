@@ -67,7 +67,7 @@
                                 <strong>CCB/Realiza</strong> <br><small class="text-muted">Analisa os arquivos referente às remessas de CCB e Realiza.</small>
                             </label>
                         </div>
-                        </div>
+                    </div>
                     <div class="mb-3 mt-3">
                         <label for="pdf_file" class="form-label fw-bold">2. Envie o Arquivo PDF:</label>
                         <input type="file" class="form-control" name="pdf_file" id="pdf_file" accept=".pdf" required>
@@ -96,7 +96,7 @@
                             <input class="form-check-input" type="radio" name="modo_separacao_comp" id="modo_ccb_realiza_comp" value="ccb_realiza">
                             <label class="form-check-label" for="modo_ccb_realiza_comp"><strong>CCB/Realiza</strong></label>
                         </div>
-                         </div>
+                    </div>
                     <div class="mb-3 mt-3">
                         <label for="pdf_mes_anterior" class="form-label fw-bold">2. Envie o Arquivo do Mês Anterior:</label>
                         <input type="file" class="form-control" name="pdf_mes_anterior" id="pdf_mes_anterior" accept=".pdf" required>
@@ -113,22 +113,57 @@
 
             <div class="tab-pane fade" id="repasse-tab-pane" role="tabpanel">
                 <h4 class="mb-3 text-center">Conciliação de Repasse</h4>
-                <p class="text-muted text-center mb-4">Envie as planilhas do Diário e do Sistema para conciliação.</p>
-                <form id="repasse-form" action="/repasse" method="post" enctype="multipart/form-data">
-                    <div class="mb-3 mt-3">
-                        <label for="diario_file" class="form-label fw-bold">1. Envie a planilha "Diário" (.xlsx):</label>
-                        <input type="file" class="form-control" name="diario_file" id="diario_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                
+                <div class="mb-3">
+                    <label class="form-label fw-bold">1. Escolha o Tipo de Conciliação:</label>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="tipo_repasse" id="tipo_pickmoney" value="pickmoney" checked>
+                        <label class="form-check-label" for="tipo_pickmoney">PickMoney</label>
                     </div>
-                    <div class="mb-3 mt-3">
-                        <label for="sistema_file" class="form-label fw-bold">2. Envie a planilha "Sistema" (.xlsx):</label>
-                        <input type="file" class="form-control" name="sistema_file" id="sistema_file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                    <div class="form-check">
+                        <input class="form-check-input" type="radio" name="tipo_repasse" id="tipo_abrasma" value="abrasma">
+                        <label class="form-check-label" for="tipo_abrasma">ABRASMA</label>
                     </div>
-                    <div class="d-grid mt-4 mb-2">
-                        <button id="repasse-button" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar Repasse</span></button>
-                    </div>
-                </form>
+                </div>
+                
+                <hr>
+
+                <div id="form-container-pickmoney" style="display: block;">
+                    <p class="text-muted text-center mb-4">Envie as planilhas do Diário e do Sistema para conciliação.</p>
+                    <form id="repasse-form-pickmoney" action="/repasse" method="post" enctype="multipart/form-data">
+                        <div class="mb-3 mt-3">
+                            <label for="diario_file" class="form-label fw-bold">1. Envie a planilha "Diário" (.xlsx):</label>
+                            <input type="file" class="form-control" name="diario_file" id="diario_file_pickmoney" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                        </div>
+                        <div class="mb-3 mt-3">
+                            <label for="sistema_file" class="form-label fw-bold">2. Envie a planilha "Sistema" (.xlsx):</label>
+                            <input type="file" class="form-control" name="sistema_file" id="sistema_file_pickmoney" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                        </div>
+                        <div class="d-grid mt-4 mb-2">
+                            <button id="repasse-button-pickmoney" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar PickMoney</span></button>
+                        </div>
+                    </form>
+                </div>
+
+                <div id="form-container-abrasma" style="display: none;">
+                    <p class="text-muted text-center mb-4">Envie as planilhas Anterior e Complementar para conciliação.</p>
+                    <form id="repasse-form-abrasma" action="/repasse_abrasma" method="post" enctype="multipart/form-data">
+                        <div class="mb-3 mt-3">
+                            <label for="anterior_file" class="form-label fw-bold">1. Envie a "Planilha Anterior" (.xlsx):</label>
+                            <input type="file" class="form-control" name="anterior_file" id="anterior_file_abrasma" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                        </div>
+                        <div class="mb-3 mt-3">
+                            <label for="complementar_file" class="form-label fw-bold">2. Envie a "Planilha Complementar" (.xlsx):</label>
+                            <input type="file" class="form-control" name="complementar_file" id="complementar_file_abrasma" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
+                        </div>
+                        <div class="d-grid mt-4 mb-2">
+                            <button id="repasse-button-abrasma" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar ABRASMA</span></button>
+                        </div>
+                    </form>
+                </div>
+
             </div>
-        </div>
+            </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -146,25 +181,78 @@
                 }, 2000);
             }
 
+            // Função para ativar o spinner no botão
             function setupFormSubmitSpinner(formId, buttonId) {
                 const form = document.getElementById(formId);
                 const button = document.getElementById(buttonId);
                 if(form && button){
                     form.addEventListener('submit', function() {
-                        button.disabled = true; // Corrigido de 'True' para 'true'
+                        button.disabled = true;
                         const buttonText = button.querySelector('.button-text');
                         if (buttonText) {
                             buttonText.textContent = ' Processando...';
                         } else {
+                            // Fallback caso não encontre .button-text
                             button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processando...';
                         }
                     });
+                } else {
+                    console.warn(`Formulário ou botão não encontrado para spinner: ${formId}, ${buttonId}`);
                 }
             }
 
+            // Configura os spinners para os 3 formulários principais
             setupFormSubmitSpinner('upload-form', 'submit-button');
             setupFormSubmitSpinner('compare-form', 'compare-button');
-            setupFormSubmitSpinner('repasse-form', 'repasse-button');
+            
+            // === NOVO JS PARA ABA REPASSE ===
+            // Configura os spinners para os *dois* formulários de repasse
+            setupFormSubmitSpinner('repasse-form-pickmoney', 'repasse-button-pickmoney');
+            setupFormSubmitSpinner('repasse-form-abrasma', 'repasse-button-abrasma');
+
+            // Seleciona os elementos da aba Repasse
+            const radioPickMoney = document.getElementById('tipo_pickmoney');
+            const radioAbrasma = document.getElementById('tipo_abrasma');
+            const formPickMoney = document.getElementById('form-container-pickmoney');
+            const formAbrasma = document.getElementById('form-container-abrasma');
+            
+            // Inputs de arquivo dos formulários
+            const inputDiario = document.getElementById('diario_file_pickmoney');
+            const inputSistema = document.getElementById('sistema_file_pickmoney');
+            const inputAnterior = document.getElementById('anterior_file_abrasma');
+            const inputComplementar = document.getElementById('complementar_file_abrasma');
+
+            // Lógica para alternar a visibilidade e o 'required' dos inputs
+            if (radioPickMoney && radioAbrasma && formPickMoney && formAbrasma) {
+                
+                function toggleRepasseForms() {
+                    if (radioPickMoney.checked) {
+                        formPickMoney.style.display = 'block';
+                        formAbrasma.style.display = 'none';
+                        // Ativa 'required' para PickMoney, desativa para ABRASMA
+                        if (inputDiario) inputDiario.required = true;
+                        if (inputSistema) inputSistema.required = true;
+                        if (inputAnterior) inputAnterior.required = false;
+                        if (inputComplementar) inputComplementar.required = false;
+                    } else if (radioAbrasma.checked) {
+                        formPickMoney.style.display = 'none';
+                        formAbrasma.style.display = 'block';
+                        // Ativa 'required' para ABRASMA, desativa para PickMoney
+                        if (inputDiario) inputDiario.required = false;
+                        if (inputSistema) inputSistema.required = false;
+                        if (inputAnterior) inputAnterior.required = true;
+                        if (inputComplementar) inputComplementar.required = true;
+                    }
+                }
+
+                // Adiciona os listeners
+                radioPickMoney.addEventListener('change', toggleRepasseForms);
+                radioAbrasma.addEventListener('change', toggleRepasseForms);
+                
+                // Garante que o estado inicial (PickMoney checked) esteja correto
+                toggleRepasseForms(); 
+            }
+            // === FIM DO NOVO JS ===
         });
     </script>
 </body>
