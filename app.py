@@ -508,6 +508,7 @@ def normalizar_valor_repasse(valor):
         return 0.0
 
 def copiar_formatacao(origem, destino):
+    """Copia toda a formatação de uma célula para outra."""
     if origem and hasattr(origem, 'has_style') and origem.has_style:
         destino.font = copy(origem.font)
         destino.border = copy(origem.border)
@@ -524,7 +525,7 @@ def achar_coluna(sheet, nome_coluna):
     return None
 
 # =======================================================
-# === FUNÇÃO criar_planilha_saida ATUALIZADA ===
+# === FUNÇÃO criar_planilha_saida ATUALIZADA (Repasse) ===
 # =======================================================
 def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out = Workbook()
@@ -533,12 +534,10 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     # Req 1: Sem grades de fundo
     ws_out.sheet_view.showGridLines = False
 
-    # Req 3 & 4: Definir estilo do cabeçalho (Verde)
-    # Um verde "Excel-friendly" (Accent 6, 40% Lighter - C6E0B4)
-    header_fill = PatternFill(start_color="C6E0B4", end_color="C6E0B4", fill_type="solid")
-    header_font = Font(bold=True, color="000000") # Preto no verde claro
-    # Borda fina inferior para o cabeçalho
-    header_border = Border(bottom=Side(style='thin', color='A0A0A0')) # Cinza claro
+    # Req 3: Definir estilo do cabeçalho (Verde Forte)
+    header_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid") # Verde forte
+    header_font = Font(bold=True, color="FFFFFF") # Fonte Branca
+    header_border = Border(bottom=Side(style='thin', color='A0A0A0')) # Borda inferior leve
 
     # Copia cabeçalho e aplica NOVO estilo
     if ws_diario.max_row > 0:
@@ -572,7 +571,7 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
         cell_status_header.border = header_border
         ws_out.column_dimensions[get_column_letter(col_status)].width = 45 # Largura maior para status
 
-    # Estilos para dados (Req 2, 5, 6)
+    # Estilos para dados (Req 2: Sem preenchimento, Sem bordas)
     no_fill = PatternFill(fill_type=None)
     no_border = Border() # Borda padrão (None)
 
@@ -581,6 +580,7 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     for linha_info in linhas:
         linha, status = linha_info # linha é (None,) ou (cell1, cell2, ...)
         
+        # Caso 1: Linha existe (vem do Diário/Anterior ou da Complementar corrigido)
         if linha is not None:
              for i, cell_data in enumerate(linha, 1):
                  try:
@@ -601,6 +601,7 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
                       print(f"[Aviso] Erro ao processar célula {i} da linha {linha_out}: {e}. Valor: {cell_data}")
                       ws_out.cell(row=linha_out, column=i, value=f"ERRO: {e}")
         
+        # Adiciona o status em ambos os casos
         if incluir_status and col_status > 0:
              cell_status_data = ws_out.cell(row=linha_out, column=col_status, value=status)
              # Garante que também não tenha formatação
@@ -653,11 +654,11 @@ def salvar_stream_em_arquivo(stream, caminho):
         raise
 
 # =======================================================
-# === FUNÇÃO PICKMONEY ATUALIZADA COM CONTADOR ===
+# === FUNÇÃO PICK MONEY ATUALIZADA COM CONTADOR ===
 # =======================================================
 def processar_repasse(diario_stream, sistema_stream):
-    """Lógica de conciliação PickMoney (Diário vs Sistema) - Lógica de Contador."""
-    print("📘 [LOG] Início de processar_repasse (PickMoney) com Lógica de Contador")
+    """Lógica de conciliação Pick Money (Diário vs Sistema) - Lógica de Contador."""
+    print("📘 [LOG] Início de processar_repasse (Pick Money) com Lógica de Contador")
     start_time = time.time()
 
     print("📘 [LOG] Carregando workbook 'Diário'...")
@@ -670,7 +671,7 @@ def processar_repasse(diario_stream, sistema_stream):
     ws_sistema = wb_sistema.worksheets[0]
     print(f"📗 [LOG] 'Sistema' carregado ({ws_sistema.max_row} linhas).")
 
-    print("📘 [LOG] Achando colunas (PickMoney)...")
+    print("📘 [LOG] Achando colunas (Pick Money)...")
     col_eq_diario = achar_coluna(ws_diario, "EQL")
     col_parcela_diario = achar_coluna(ws_diario, "Parcela")
     col_principal_diario = 4 # Assumindo coluna D
@@ -692,7 +693,7 @@ def processar_repasse(diario_stream, sistema_stream):
          print(f"📕 [ERRO] {error_msg}")
          raise ValueError(error_msg)
 
-    print("📘 [LOG] Loop 1 (PickMoney): Contando 'Diário' (values_only)...")
+    print("📘 [LOG] Loop 1 (Pick Money): Contando 'Diário' (values_only)...")
     counter_diario = Counter()
     for row in ws_diario.iter_rows(min_row=2, values_only=True):
         eql = str(row[col_eq_diario - 1]).strip() if col_eq_diario <= len(row) and row[col_eq_diario - 1] else ""
@@ -706,7 +707,7 @@ def processar_repasse(diario_stream, sistema_stream):
 
     print(f"📗 [LOG] Fim Loop 1. 'Diário' contado. {len(counter_diario)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
-    print("📘 [LOG] Loop 2 (PickMoney): Contando 'Sistema'...")
+    print("📘 [LOG] Loop 2 (Pick Money): Contando 'Sistema'...")
     counter_sistema = Counter()
     for row in ws_sistema.iter_rows(min_row=2, values_only=True):
         eql = str(row[col_eq_sistema - 1]).strip() if col_eq_sistema <= len(row) and row[col_eq_sistema - 1] else ""
@@ -731,7 +732,7 @@ def processar_repasse(diario_stream, sistema_stream):
     nao_encontrados_diario = []
     nao_encontrados_sistema = []
 
-    print("📘 [LOG] Loop 3 (PickMoney): Classificando linhas do 'Diário'...")
+    print("📘 [LOG] Loop 3 (Pick Money): Classificando linhas do 'Diário'...")
     vistos_diario = Counter()
     if ws_diario.max_row >= 2:
         for row_cells in ws_diario.iter_rows(min_row=2):
@@ -762,7 +763,7 @@ def processar_repasse(diario_stream, sistema_stream):
             elif vistos_diario[chave_completa] > 1 and vistos_diario[chave_completa] > counter_diario.get(chave_completa, 0):
                  divergentes.append((row_cells, f"Duplicado no 'Diário' (EQL {eql}, P {parcela}, V {total:.2f})"))
 
-    print("📘 [LOG] Loop 4 (PickMoney): Classificando linhas do 'Sistema'...")
+    print("📘 [LOG] Loop 4 (Pick Money): Classificando linhas do 'Sistema'...")
     if ws_sistema.max_row >= 2:
         for row_cells in ws_sistema.iter_rows(min_row=2):
             celula_eql = row_cells[col_eq_sistema - 1] if col_eq_sistema <= len(row_cells) else None
@@ -780,9 +781,9 @@ def processar_repasse(diario_stream, sistema_stream):
                 nao_encontrados_sistema.append((row_cells, f"Não encontrado no 'Diário' (ou duplicado no Sistema)"))
                 chaves_sistema_apenas_dict[chave_completa] -= 1
 
-    print(f"📗 [LOG] Fim Comparação PickMoney. Tempo: {time.time() - start_time:.2f}s")
+    print(f"📗 [LOG] Fim Comparação Pick Money. Tempo: {time.time() - start_time:.2f}s")
     
-    print("📘 [LOG] Criando planilhas de saída (PickMoney)...")
+    print("📘 [LOG] Criando planilhas de saída (Pick Money)...")
     iguais_stream = criar_planilha_saida(iguais, ws_diario, incluir_status=False)
     divergentes_stream = criar_planilha_saida(divergentes, ws_diario, incluir_status=True)
     
@@ -791,7 +792,7 @@ def processar_repasse(diario_stream, sistema_stream):
     nao_encontrados_stream = criar_planilha_saida(nao_encontrados_combinados, ws_diario, incluir_status=True)
 
     timestamp_str = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-    pasta_saida = os.path.join(app.config['UPLOAD_FOLDER'], f"repasse_pickmoney_{timestamp_str}")
+    pasta_saida = os.path.join(app.config['UPLOAD_FOLDER'], f"repasse_pick_money_{timestamp_str}")
     os.makedirs(pasta_saida, exist_ok=True)
     print(f"Pasta de saída criada: {pasta_saida}")
 
@@ -799,20 +800,20 @@ def processar_repasse(diario_stream, sistema_stream):
         salvar_stream_em_arquivo(iguais_stream, os.path.join(pasta_saida, "iguais.xlsx"))
         salvar_stream_em_arquivo(divergentes_stream, os.path.join(pasta_saida, "divergentes.xlsx"))
         salvar_stream_em_arquivo(nao_encontrados_stream, os.path.join(pasta_saida, "nao_encontrados.xlsx"))
-        print(f"📗 [LOG] Arquivos Excel (PickMoney) salvos na pasta: {pasta_saida}")
+        print(f"📗 [LOG] Arquivos Excel (Pick Money) salvos na pasta: {pasta_saida}")
     except Exception as e_save:
-         print(f"📕 [ERRO] Falha ao salvar arquivos Excel (PickMoney) na pasta {pasta_saida}: {e_save}")
+         print(f"📕 [ERRO] Falha ao salvar arquivos Excel (Pick Money) na pasta {pasta_saida}: {e_save}")
          raise
 
     count_nao_encontrados = len(nao_encontrados_combinados)
-    print(f"✅ [LOG] Fim de processar_repasse (PickMoney). Totais: Iguais={len(iguais)}, Divergentes={len(divergentes)}, Não Encontrados={count_nao_encontrados}. Tempo total: {time.time() - start_time:.2f}s")
+    print(f"✅ [LOG] Fim de processar_repasse (Pick Money). Totais: Iguais={len(iguais)}, Divergentes={len(divergentes)}, Não Encontrados={count_nao_encontrados}. Tempo total: {time.time() - start_time:.2f}s")
     return pasta_saida, len(iguais), len(divergentes), count_nao_encontrados
 
 # =======================================================
 # === FUNÇÃO ABRASMA ATUALIZADA COM CONTADOR ===
 # =======================================================
 def processar_repasse_abrasma(anterior_stream, complementar_stream):
-    """Lógica de conciliação ABRASMA (Anterior vs Complementar) - Lógica de Contador."""
+    """Lógica de conciliação Abrasma (Anterior vs Complementar) - Lógica de Contador."""
     print("📘 [LOG] Início de processar_repasse_abrasma")
     start_time = time.time()
 
@@ -826,7 +827,7 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     ws_comp = wb_comp.worksheets[0]
     print(f"📗 [LOG] 'Complementar' carregada ({ws_comp.max_row} linhas).")
 
-    print("📘 [LOG] Achando colunas (ABRASMA)...")
+    print("📘 [LOG] Achando colunas (Abrasma)...")
     col_eql_ant = achar_coluna(ws_ant, "EQL")
     col_parc_ant = achar_coluna(ws_ant, "Parc")
     col_total_ant = achar_coluna(ws_ant, "Total Recebido")
@@ -850,7 +851,7 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
          print(f"📕 [ERRO] {error_msg}")
          raise ValueError(error_msg)
 
-    print("📘 [LOG] Loop 1 (ABRASMA): Contando 'Anterior' (values_only)...")
+    print("📘 [LOG] Loop 1 (Abrasma): Contando 'Anterior' (values_only)...")
     counter_ant = Counter()
     for row in ws_ant.iter_rows(min_row=2, values_only=True):
         eql = str(row[col_eql_ant - 1]).strip() if col_eql_ant <= len(row) and row[col_eql_ant - 1] else ""
@@ -862,7 +863,7 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
 
     print(f"📗 [LOG] Fim Loop 1. 'Anterior' contada. {len(counter_ant)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
-    print("📘 [LOG] Loop 2 (ABRASMA): Contando 'Complementar'...")
+    print("📘 [LOG] Loop 2 (Abrasma): Contando 'Complementar'...")
     counter_comp = Counter()
     for row in ws_comp.iter_rows(min_row=2, values_only=True):
         eql = str(row[col_eql_comp - 1]).strip() if col_eql_comp <= len(row) and row[col_eql_comp - 1] else ""
@@ -874,7 +875,6 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
 
     print(f"📗 [LOG] Fim Loop 2. 'Complementar' contada. {len(counter_comp)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
-    # Calcula as diferenças usando Contadores
     chaves_todas = set(counter_ant.keys()) | set(counter_comp.keys())
     
     chaves_iguais_dict = {k: min(counter_ant[k], counter_comp[k]) for k in chaves_todas if min(counter_ant[k], counter_comp[k]) > 0}
@@ -886,7 +886,7 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     nao_encontrados_ant = []
     nao_encontrados_comp = []
 
-    print("📘 [LOG] Loop 3 (ABRASMA): Classificando linhas da 'Anterior'...")
+    print("📘 [LOG] Loop 3 (Abrasma): Classificando linhas da 'Anterior'...")
     vistos_ant = Counter()
     if ws_ant.max_row >= 2:
         for row_cells in ws_ant.iter_rows(min_row=2):
@@ -914,7 +914,7 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
             elif vistos_ant[chave_completa] > 1 and vistos_ant[chave_completa] > counter_ant.get(chave_completa, 0):
                  divergentes.append((row_cells, f"Duplicado na 'Anterior' (EQL {eql}, P {parc}, V {total:.2f})"))
                       
-    print("📘 [LOG] Loop 4 (ABRASMA): Classificando linhas da 'Complementar'...")
+    print("📘 [LOG] Loop 4 (Abrasma): Classificando linhas da 'Complementar'...")
     if ws_comp.max_row >= 2:
         for row_cells_comp in ws_comp.iter_rows(min_row=2):
             celula_eql = row_cells_comp[col_eql_comp - 1] if col_eql_comp <= len(row_cells_comp) else None
@@ -933,9 +933,9 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
                 nao_encontrados_comp.append((row_cells_comp, f"Não encontrado na 'Anterior' (ou duplicado na Complementar)"))
                 chaves_comp_apenas_dict[chave_completa] -= 1
 
-    print(f"📗 [LOG] Fim Comparação ABRASMA. Tempo: {time.time() - start_time:.2f}s")
+    print(f"📗 [LOG] Fim Comparação Abrasma. Tempo: {time.time() - start_time:.2f}s")
 
-    print("📘 [LOG] Criando planilhas de saída (ABRASMA)...")
+    print("📘 [LOG] Criando planilhas de saída (Abrasma)...")
     # Usa ws_ant (Planilha Anterior) como modelo para cabeçalho e formatação
     iguais_stream = criar_planilha_saida(iguais, ws_ant, incluir_status=False)
     divergentes_stream = criar_planilha_saida(divergentes, ws_ant, incluir_status=True)
@@ -952,13 +952,13 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
         salvar_stream_em_arquivo(iguais_stream, os.path.join(pasta_saida, "iguais.xlsx"))
         salvar_stream_em_arquivo(divergentes_stream, os.path.join(pasta_saida, "divergentes.xlsx"))
         salvar_stream_em_arquivo(nao_encontrados_stream, os.path.join(pasta_saida, "nao_encontrados.xlsx"))
-        print(f"📗 [LOG] Arquivos Excel (ABRASMA) salvos na pasta: {pasta_saida}")
+        print(f"📗 [LOG] Arquivos Excel (Abrasma) salvos na pasta: {pasta_saida}")
     except Exception as e_save:
-         print(f"📕 [ERRO] Falha ao salvar arquivos Excel (ABRASMA) na pasta {pasta_saida}: {e_save}")
+         print(f"📕 [ERRO] Falha ao salvar arquivos Excel (Abrasma) na pasta {pasta_saida}: {e_save}")
          raise
 
     count_nao_encontrados = len(nao_encontrados_combinados)
-    print(f"✅ [LOG] Fim de processar_repasse (ABRASMA). Totais: Iguais={len(iguais)}, Divergentes={len(divergentes)}, Não Encontrados={count_nao_encontrados}. Tempo total: {time.time() - start_time:.2f}s")
+    print(f"✅ [LOG] Fim de processar_repasse (Abrasma). Totais: Iguais={len(iguais)}, Divergentes={len(divergentes)}, Não Encontrados={count_nao_encontrados}. Tempo total: {time.time() - start_time:.2f}s")
     return pasta_saida, len(iguais), len(divergentes), count_nao_encontrados
 
 
@@ -1184,21 +1184,21 @@ def compare_files():
 
 @app.route('/repasse', methods=['POST'])
 def repasse_file():
-    """Rota para a conciliação PickMoney (Diário vs Sistema)"""
-    print("\n--- RECEIVED REQUEST /repasse (PickMoney) ---")
+    """Rota para a conciliação Pick Money (Diário vs Sistema)"""
+    print("\n--- RECEIVED REQUEST /repasse (Pick Money) ---")
     start_time_route = time.time()
 
     if 'diario_file' not in request.files or 'sistema_file' not in request.files:
         print("📕 [ERRO] Arquivos 'diario_file' ou 'sistema_file' faltando.")
         return manual_render_template('error.html', status_code=400,
             error_title="Arquivos faltando",
-            error_message="Você precisa enviar os arquivos 'Diário' e 'Sistema' para a conciliação PickMoney.")
+            error_message="Você precisa enviar os arquivos 'Diário' e 'Sistema' para a conciliação Pick Money.")
 
     file_diario = request.files['diario_file']
     file_sistema = request.files['sistema_file']
 
     if file_diario.filename == '' or file_sistema.filename == '':
-        print("📕 [ERRO] Nomes dos arquivos Excel (PickMoney) estão vazios.")
+        print("📕 [ERRO] Nomes dos arquivos Excel (Pick Money) estão vazios.")
         return manual_render_template('error.html', status_code=400,
             error_title="Arquivos faltando",
             error_message="Selecione os dois arquivos Excel (Diário e Sistema) para conciliar.")
@@ -1212,19 +1212,19 @@ def repasse_file():
              error_title="Tipo de Arquivo Inválido",
              error_message=f"Por favor, envie apenas arquivos Excel ({', '.join(allowed_extensions)}).")
 
-    print(f"📘 [LOG] Recebidos (PickMoney): {file_diario.filename}, {file_sistema.filename}")
+    print(f"📘 [LOG] Recebidos (Pick Money): {file_diario.filename}, {file_sistema.filename}")
 
     try:
         diario_stream = io.BytesIO(file_diario.read())
         sistema_stream = io.BytesIO(file_sistema.read())
-        print(f"📘 [LOG] Arquivos Excel (PickMoney) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
+        print(f"📘 [LOG] Arquivos Excel (Pick Money) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
 
-        # Chama a função de processamento PickMoney (com lógica de contador)
+        # Chama a função de processamento Pick Money (com lógica de contador)
         pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse(diario_stream, sistema_stream)
 
-        print(f"📘 [LOG] Processamento (PickMoney) concluído. Criando ZIP da pasta '{pasta_saida}'...")
+        print(f"📘 [LOG] Processamento (Pick Money) concluído. Criando ZIP da pasta '{pasta_saida}'...")
         zip_stream = io.BytesIO()
-        timestamp_str = os.path.basename(pasta_saida).replace('repasse_pickmoney_', '')
+        timestamp_str = os.path.basename(pasta_saida).replace('repasse_pick_money_', '') # Corrigido
 
         zip_arcname_iguais = "iguais.xlsx"
         zip_arcname_divergentes = "divergentes.xlsx"
@@ -1240,19 +1240,19 @@ def repasse_file():
             if os.path.exists(path_nao_encontrados): zf.write(path_nao_encontrados, arcname=zip_arcname_nao_encontrados)
 
         zip_stream.seek(0)
-        print(f"📗 [LOG] ZIP (PickMoney) criado em memória.")
+        print(f"📗 [LOG] ZIP (Pick Money) criado em memória.")
 
-        report_filename = f"repasse_pickmoney_conciliado_{timestamp_str}.zip"
+        report_filename = f"repasse_pick_money_conciliado_{timestamp_str}.zip" # Corrigido
         report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
         try:
             with open(report_path, 'wb') as f:
                 f.write(zip_stream.getvalue())
-            print(f"📗 [LOG] Arquivo ZIP (PickMoney) salvo para download em {report_path}.")
+            print(f"📗 [LOG] Arquivo ZIP (Pick Money) salvo para download em {report_path}.")
         except Exception as e_save:
-             print(f"📕 [ERRO] Erro ao salvar o arquivo ZIP (PickMoney) em {report_path}: {e_save}")
+             print(f"📕 [ERRO] Erro ao salvar o arquivo ZIP (Pick Money) em {report_path}: {e_save}")
              raise e_save
 
-        print("✅ [LOG] Enviando resposta (PickMoney) para 'repasse_results.html'")
+        print("✅ [LOG] Enviando resposta (Pick Money) para 'repasse_results.html'")
         return manual_render_template('repasse_results.html',
             count_iguais=count_iguais,
             count_divergentes=count_divergentes,
@@ -1264,20 +1264,20 @@ def repasse_file():
          print(f"📕 [ERRO VALIDAÇÃO] {ve}")
          traceback.print_exc()
          return manual_render_template('error.html', status_code=400,
-             error_title="Erro na Conciliação (PickMoney) - Colunas Não Encontradas",
+             error_title="Erro na Conciliação (Pick Money) - Colunas Não Encontradas",
              error_message=f"Verifique os nomes das colunas nas planilhas. Detalhes: {ve}")
     except Exception as e:
-        print(f"📕 [ERRO FATAL] Erro inesperado na rota /repasse (PickMoney): {e}")
+        print(f"📕 [ERRO FATAL] Erro inesperado na rota /repasse (Pick Money): {e}")
         traceback.print_exc()
         error_details = f"{type(e).__name__}: {e}"
         return manual_render_template('error.html', status_code=500,
-            error_title="Erro inesperado na conciliação (PickMoney)",
+            error_title="Erro inesperado na conciliação (Pick Money)",
             error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {error_details}")
 
 
 @app.route('/repasse_abrasma', methods=['POST'])
 def repasse_abrasma_file():
-    """Rota para a conciliação ABRASMA (Anterior vs Complementar)"""
+    """Rota para a conciliação Abrasma (Anterior vs Complementar)"""
     print("\n--- RECEIVED REQUEST /repasse_abrasma ---")
     start_time_route = time.time()
 
@@ -1285,13 +1285,13 @@ def repasse_abrasma_file():
         print("📕 [ERRO] Arquivos 'anterior_file' ou 'complementar_file' faltando.")
         return manual_render_template('error.html', status_code=400,
             error_title="Arquivos faltando",
-            error_message="Você precisa enviar a 'Planilha Anterior' e a 'Planilha Complementar' para a conciliação ABRASMA.")
+            error_message="Você precisa enviar a 'Planilha Anterior' e a 'Planilha Complementar' para a conciliação Abrasma.")
 
     file_ant = request.files['anterior_file']
     file_comp = request.files['complementar_file']
 
     if file_ant.filename == '' or file_comp.filename == '':
-        print("📕 [ERRO] Nomes dos arquivos Excel (ABRASMA) estão vazios.")
+        print("📕 [ERRO] Nomes dos arquivos Excel (Abrasma) estão vazios.")
         return manual_render_template('error.html', status_code=400,
             error_title="Arquivos faltando",
             error_message="Selecione os dois arquivos Excel (Anterior e Complementar) para conciliar.")
@@ -1305,17 +1305,17 @@ def repasse_abrasma_file():
              error_title="Tipo de Arquivo Inválido",
              error_message=f"Por favor, envie apenas arquivos Excel ({', '.join(allowed_extensions)}).")
 
-    print(f"📘 [LOG] Recebidos (ABRASMA): {file_ant.filename}, {file_comp.filename}")
+    print(f"📘 [LOG] Recebidos (Abrasma): {file_ant.filename}, {file_comp.filename}")
 
     try:
         anterior_stream = io.BytesIO(file_ant.read())
         complementar_stream = io.BytesIO(file_comp.read())
-        print(f"📘 [LOG] Arquivos Excel (ABRASMA) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
+        print(f"📘 [LOG] Arquivos Excel (Abrasma) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
 
-        # Chama a função de processamento ABRASMA (com lógica de contador)
+        # Chama a função de processamento Abrasma (com lógica de contador)
         pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse_abrasma(anterior_stream, complementar_stream)
 
-        print(f"📘 [LOG] Processamento (ABRASMA) concluído. Criando ZIP da pasta '{pasta_saida}'...")
+        print(f"📘 [LOG] Processamento (Abrasma) concluído. Criando ZIP da pasta '{pasta_saida}'...")
         zip_stream = io.BytesIO()
         timestamp_str = os.path.basename(pasta_saida).replace('repasse_abrasma_', '')
 
@@ -1333,19 +1333,19 @@ def repasse_abrasma_file():
             if os.path.exists(path_nao_encontrados): zf.write(path_nao_encontrados, arcname=zip_arcname_nao_encontrados)
 
         zip_stream.seek(0)
-        print(f"📗 [LOG] ZIP (ABRASMA) criado em memória.")
+        print(f"📗 [LOG] ZIP (Abrasma) criado em memória.")
 
         report_filename = f"repasse_abrasma_conciliado_{timestamp_str}.zip"
         report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
         try:
             with open(report_path, 'wb') as f:
                 f.write(zip_stream.getvalue())
-            print(f"📗 [LOG] Arquivo ZIP (ABRASMA) salvo para download em {report_path}.")
+            print(f"📗 [LOG] Arquivo ZIP (Abrasma) salvo para download em {report_path}.")
         except Exception as e_save:
-             print(f"📕 [ERRO] Erro ao salvar o arquivo ZIP (ABRASMA) em {report_path}: {e_save}")
+             print(f"📕 [ERRO] Erro ao salvar o arquivo ZIP (Abrasma) em {report_path}: {e_save}")
              raise e_save
 
-        print("✅ [LOG] Enviando resposta (ABRASMA) para 'repasse_results.html'")
+        print("✅ [LOG] Enviando resposta (Abrasma) para 'repasse_results.html'")
         return manual_render_template('repasse_results.html',
             count_iguais=count_iguais,
             count_divergentes=count_divergentes,
@@ -1354,17 +1354,17 @@ def repasse_abrasma_file():
         )
 
     except ValueError as ve:
-         print(f"📕 [ERRO VALIDAÇÃO ABRASMA] {ve}")
+         print(f"📕 [ERRO VALIDAÇÃO Abrasma] {ve}")
          traceback.print_exc()
          return manual_render_template('error.html', status_code=400,
-             error_title="Erro na Conciliação (ABRASMA) - Colunas Não Encontradas",
+             error_title="Erro na Conciliação (Abrasma) - Colunas Não Encontradas",
              error_message=f"Verifique os nomes das colunas (EQL, Parc, Total Recebido). Detalhes: {ve}")
     except Exception as e:
         print(f"📕 [ERRO FATAL] Erro inesperado na rota /repasse_abrasma: {e}")
         traceback.print_exc()
         error_details = f"{type(e).__name__}: {e}"
         return manual_render_template('error.html', status_code=500,
-            error_title="Erro inesperado na conciliação (ABRASMA)",
+            error_title="Erro inesperado na conciliação (Abrasma)",
             error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {error_details}")
 
 
