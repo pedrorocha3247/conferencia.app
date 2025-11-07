@@ -692,7 +692,7 @@ def processar_repasse(diario_stream, sistema_stream, considerar_eql, considerar_
     if not col_eq_diario: missing_cols.append("EQL (Diário)")
     if not col_parcela_diario: missing_cols.append("Parcela/Parc (Diário)")
     if not col_principal_diario: missing_cols.append("Principal (Diário)")
-    if not col_corrmonet_diario: missing_cols.append("Correção Monetária/Correção (Diário)")
+    if not col_corrmonet_diario: missing_cols.append("Correção Monetária Plano")
     if not col_eq_sistema: missing_cols.append("EQL (Sistema)")
     if not col_parcela_sistema: missing_cols.append("Parcela/Parc (Sistema)")
     if not col_valor_sistema: missing_cols.append("Valor (Sistema)")
@@ -1486,4 +1486,5 @@ if __name__ == '__main__':
     print(f"Executando em http://0.0.0.0:{port} (debug={debug_mode})")
     # threaded=True pode ajudar a evitar timeouts em requisições longas localmente
     app.run(debug=debug_mode, host='0.0.0.0', port=port, threaded=True)
+
 
