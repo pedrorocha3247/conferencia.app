@@ -17,6 +17,7 @@
         .nav-pills .nav-link { font-weight: bold; background-color: #37404a; color: #adb5bd; border: 1px solid transparent; }
         .nav-pills .nav-link.active { background-color: #2b90d9; color: #fff; }
         .nav-pills { --bs-nav-pills-border-radius: .375rem .375rem 0 0; }
+        .form-check-inline { margin-right: 1.5rem; }
     </style>
 </head>
 <body>
@@ -118,11 +119,11 @@
                     <label class="form-label fw-bold">1. Escolha o Tipo de Conciliação:</label>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="tipo_repasse" id="tipo_pickmoney" value="pickmoney" checked>
-                        <label class="form-check-label" for="tipo_pickmoney">PickMoney</label>
+                        <label class="form-check-label" for="tipo_pickmoney">Pick Money</label>
                     </div>
                     <div class="form-check">
                         <input class="form-check-input" type="radio" name="tipo_repasse" id="tipo_abrasma" value="abrasma">
-                        <label class="form-check-label" for="tipo_abrasma">ABRASMA</label>
+                        <label class="form-check-label" for="tipo_abrasma">Abrasma</label>
                     </div>
                 </div>
                 
@@ -132,15 +133,34 @@
                     <p class="text-muted text-center mb-4">Envie as planilhas do Diário e do Sistema para conciliação.</p>
                     <form id="repasse-form-pickmoney" action="/repasse" method="post" enctype="multipart/form-data">
                         <div class="mb-3 mt-3">
-                            <label for="diario_file" class="form-label fw-bold">1. Envie a planilha "Diário" (.xlsx):</label>
+                            <label for="diario_file" class="form-label fw-bold">2. Envie a planilha "Diário" (.xlsx):</label>
                             <input type="file" class="form-control" name="diario_file" id="diario_file_pickmoney" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
                         </div>
                         <div class="mb-3 mt-3">
-                            <label for="sistema_file" class="form-label fw-bold">2. Envie a planilha "Sistema" (.xlsx):</label>
+                            <label for="sistema_file" class="form-label fw-bold">3. Envie a planilha "Sistema" (.xlsx):</label>
                             <input type="file" class="form-control" name="sistema_file" id="sistema_file_pickmoney" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
                         </div>
+                        
+                        <div class="mb-3 mt-4">
+                             <label class="form-label fw-bold">4. Considerar:</label>
+                             <div class="d-flex justify-content-start">
+                                 <div class="form-check form-check-inline">
+                                     <input class="form-check-input" type="checkbox" name="considerar_eql_pm" id="considerar_eql_pm" value="on" checked>
+                                     <label class="form-check-label" for="considerar_eql_pm">EQL</label>
+                                 </div>
+                                 <div class="form-check form-check-inline">
+                                     <input class="form-check-input" type="checkbox" name="considerar_parc_pm" id="considerar_parc_pm" value="on" checked>
+                                     <label class="form-check-label" for="considerar_parc_pm">Parcela</label>
+                                 </div>
+                                 <div class="form-check form-check-inline">
+                                     <input class="form-check-input" type="checkbox" name="considerar_valor_pm" id="considerar_valor_pm" value="on" checked>
+                                     <label class="form-check-label" for="considerar_valor_pm">Valor</label>
+                                 </div>
+                             </div>
+                        </div>
+
                         <div class="d-grid mt-4 mb-2">
-                            <button id="repasse-button-pickmoney" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar PickMoney</span></button>
+                            <button id="repasse-button-pickmoney" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar Pick Money</span></button>
                         </div>
                     </form>
                 </div>
@@ -149,15 +169,34 @@
                     <p class="text-muted text-center mb-4">Envie as planilhas Anterior e Complementar para conciliação.</p>
                     <form id="repasse-form-abrasma" action="/repasse_abrasma" method="post" enctype="multipart/form-data">
                         <div class="mb-3 mt-3">
-                            <label for="anterior_file" class="form-label fw-bold">1. Envie a "Planilha Anterior" (.xlsx):</label>
+                            <label for="anterior_file" class="form-label fw-bold">2. Envie a "Planilha Anterior" (.xlsx):</label>
                             <input type="file" class="form-control" name="anterior_file" id="anterior_file_abrasma" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
                         </div>
                         <div class="mb-3 mt-3">
-                            <label for="complementar_file" class="form-label fw-bold">2. Envie a "Planilha Complementar" (.xlsx):</label>
+                            <label for="complementar_file" class="form-label fw-bold">3. Envie a "Planilha Complementar" (.xlsx):</label>
                             <input type="file" class="form-control" name="complementar_file" id="complementar_file_abrasma" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
                         </div>
+
+                        <div class="mb-3 mt-4">
+                             <label class="form-label fw-bold">4. Considerar:</label>
+                             <div class="d-flex justify-content-start">
+                                 <div class="form-check form-check-inline">
+                                     <input class="form-check-input" type="checkbox" name="considerar_eql_ab" id="considerar_eql_ab" value="on" checked>
+                                     <label class="form-check-label" for="considerar_eql_ab">EQL</label>
+                                 </div>
+                                 <div class="form-check form-check-inline">
+                                     <input class="form-check-input" type="checkbox" name="considerar_parc_ab" id="considerar_parc_ab" value="on" checked>
+                                     <label class="form-check-label" for="considerar_parc_ab">Parcela</label>
+                                 </div>
+                                 <div class="form-check form-check-inline">
+                                     <input class="form-check-input" type="checkbox" name="considerar_valor_ab" id="considerar_valor_ab" value="on" checked>
+                                     <label class="form-check-label" for="considerar_valor_ab">Valor</label>
+                                 </div>
+                             </div>
+                        </div>
+
                         <div class="d-grid mt-4 mb-2">
-                            <button id="repasse-button-abrasma" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar ABRASMA</span></button>
+                            <button id="repasse-button-abrasma" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar Abrasma</span></button>
                         </div>
                     </form>
                 </div>
@@ -186,13 +225,25 @@
                 const form = document.getElementById(formId);
                 const button = document.getElementById(buttonId);
                 if(form && button){
-                    form.addEventListener('submit', function() {
+                    form.addEventListener('submit', function(event) {
+                        
+                        // Validação customizada para os checkboxes
+                        let checkboxes = form.querySelectorAll('input[type="checkbox"]');
+                        if (checkboxes.length > 0) {
+                            let isOneChecked = Array.from(checkboxes).some(cb => cb.checked);
+                            if (!isOneChecked) {
+                                alert('Erro: Pelo menos uma opção em "Considerar" deve ser marcada.');
+                                event.preventDefault(); // Impede o envio do formulário
+                                return; // Para a execução
+                            }
+                        }
+
+                        // Se a validação passou, ativa o spinner
                         button.disabled = true;
                         const buttonText = button.querySelector('.button-text');
                         if (buttonText) {
                             buttonText.textContent = ' Processando...';
                         } else {
-                            // Fallback caso não encontre .button-text
                             button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processando...';
                         }
                     });
@@ -205,7 +256,6 @@
             setupFormSubmitSpinner('upload-form', 'submit-button');
             setupFormSubmitSpinner('compare-form', 'compare-button');
             
-            // === NOVO JS PARA ABA REPASSE ===
             // Configura os spinners para os *dois* formulários de repasse
             setupFormSubmitSpinner('repasse-form-pickmoney', 'repasse-button-pickmoney');
             setupFormSubmitSpinner('repasse-form-abrasma', 'repasse-button-abrasma');
@@ -229,7 +279,7 @@
                     if (radioPickMoney.checked) {
                         formPickMoney.style.display = 'block';
                         formAbrasma.style.display = 'none';
-                        // Ativa 'required' para PickMoney, desativa para ABRASMA
+                        // Ativa 'required' para Pick Money, desativa para Abrasma
                         if (inputDiario) inputDiario.required = true;
                         if (inputSistema) inputSistema.required = true;
                         if (inputAnterior) inputAnterior.required = false;
@@ -237,7 +287,7 @@
                     } else if (radioAbrasma.checked) {
                         formPickMoney.style.display = 'none';
                         formAbrasma.style.display = 'block';
-                        // Ativa 'required' para ABRASMA, desativa para PickMoney
+                        // Ativa 'required' para Abrasma, desativa para Pick Money
                         if (inputDiario) inputDiario.required = false;
                         if (inputSistema) inputSistema.required = false;
                         if (inputAnterior) inputAnterior.required = true;
@@ -249,10 +299,9 @@
                 radioPickMoney.addEventListener('change', toggleRepasseForms);
                 radioAbrasma.addEventListener('change', toggleRepasseForms);
                 
-                // Garante que o estado inicial (PickMoney checked) esteja correto
+                // Garante que o estado inicial (Pick Money checked) esteja correto
                 toggleRepasseForms(); 
             }
-            // === FIM DO NOVO JS ===
         });
     </script>
 </body>
