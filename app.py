@@ -681,7 +681,7 @@ def processar_repasse(diario_stream, sistema_stream, considerar_eql, considerar_
     col_eq_diario = achar_coluna_flex(ws_diario, ["eql"])
     col_parcela_diario = achar_coluna_flex(ws_diario, ["parc", "parcela"])
     col_principal_diario = achar_coluna_flex(ws_diario, ["principal"])
-    col_corrmonet_diario = achar_coluna_flex(ws_diario, ["correção monetária", "correção", "corrmonet"])
+    col_corrmonet_diario = achar_coluna_flex(ws_diario, ["Correção Monetária Plano"])
 
     col_eq_sistema = achar_coluna_flex(ws_sistema, ["eql"])
     col_parcela_sistema = achar_coluna_flex(ws_sistema, ["parc", "parcela"])
@@ -1486,3 +1486,4 @@ if __name__ == '__main__':
     print(f"Executando em http://0.0.0.0:{port} (debug={debug_mode})")
     # threaded=True pode ajudar a evitar timeouts em requisições longas localmente
     app.run(debug=debug_mode, host='0.0.0.0', port=port, threaded=True)
+
