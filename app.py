@@ -517,12 +517,17 @@ def copiar_formatacao(origem, destino):
         destino.protection = copy(origem.protection)
         destino.alignment = copy(origem.alignment)
 
-def achar_coluna(sheet, nome_coluna):
+# =======================================================
+# === NOVA FUNÇÃO achar_coluna_flex ===
+# =======================================================
+def achar_coluna_flex(sheet, nomes_possiveis: list):
+    """Encontra o número da coluna (1-indexado) para o primeiro nome que corresponder."""
     if sheet.max_row == 0: return None
-    for cell in sheet[1]:
-        if cell.value and str(cell.value).strip().lower() == nome_coluna.lower():
-            return cell.column
-    return None
+    nomes_lower = [nome.lower() for nome in nomes_possiveis]
+    for cell in sheet[1]: # Itera sobre a primeira linha (cabeçalho)
+        if cell.value and str(cell.value).strip().lower() in nomes_lower:
+            return cell.column # Retorna o índice 1-based (ex: 1 para 'A')
+    return None # Não encontrou
 
 # =======================================================
 # === FUNÇÃO criar_planilha_saida ATUALIZADA (Repasse) ===
@@ -654,11 +659,11 @@ def salvar_stream_em_arquivo(stream, caminho):
         raise
 
 # =======================================================
-# === FUNÇÃO PICK MONEY ATUALIZADA COM CONTADOR ===
+# === FUNÇÃO PICK MONEY ATUALIZADA (DINÂMICA) ===
 # =======================================================
-def processar_repasse(diario_stream, sistema_stream):
-    """Lógica de conciliação Pick Money (Diário vs Sistema) - Lógica de Contador."""
-    print("📘 [LOG] Início de processar_repasse (Pick Money) com Lógica de Contador")
+def processar_repasse(diario_stream, sistema_stream, considerar_eql, considerar_parc, considerar_valor):
+    """Lógica de conciliação Pick Money (Diário vs Sistema) - Lógica de Contador Dinâmico."""
+    print(f"📘 [LOG] Início de processar_repasse (Pick Money) com Lógica Dinâmica: EQL={considerar_eql}, Parc={considerar_parc}, Valor={considerar_valor}")
     start_time = time.time()
 
     print("📘 [LOG] Carregando workbook 'Diário'...")
@@ -672,26 +677,35 @@ def processar_repasse(diario_stream, sistema_stream):
     print(f"📗 [LOG] 'Sistema' carregado ({ws_sistema.max_row} linhas).")
 
     print("📘 [LOG] Achando colunas (Pick Money)...")
-    col_eq_diario = achar_coluna(ws_diario, "EQL")
-    col_parcela_diario = achar_coluna(ws_diario, "Parcela")
-    col_principal_diario = 4 # Assumindo coluna D
-    col_corrmonet_diario = 9 # Assumindo coluna I
+    # Busca dinâmica de colunas
+    col_eq_diario = achar_coluna_flex(ws_diario, ["eql"])
+    col_parcela_diario = achar_coluna_flex(ws_diario, ["parc", "parcela"])
+    col_principal_diario = achar_coluna_flex(ws_diario, ["principal"])
+    col_corrmonet_diario = achar_coluna_flex(ws_diario, ["correção monetária", "correção", "corrmonet"])
 
-    col_eq_sistema = achar_coluna(ws_sistema, "EQL")
-    col_parcela_sistema = achar_coluna(ws_sistema, "Parcela")
-    col_valor_sistema = achar_coluna(ws_sistema, "Valor")
+    col_eq_sistema = achar_coluna_flex(ws_sistema, ["eql"])
+    col_parcela_sistema = achar_coluna_flex(ws_sistema, ["parc", "parcela"])
+    col_valor_sistema = achar_coluna_flex(ws_sistema, ["valor"])
 
+    # Validação robusta
     missing_cols = []
     if not col_eq_diario: missing_cols.append("EQL (Diário)")
-    if not col_parcela_diario: missing_cols.append("Parcela (Diário)")
+    if not col_parcela_diario: missing_cols.append("Parcela/Parc (Diário)")
+    if not col_principal_diario: missing_cols.append("Principal (Diário)")
+    if not col_corrmonet_diario: missing_cols.append("Correção Monetária/Correção (Diário)")
     if not col_eq_sistema: missing_cols.append("EQL (Sistema)")
-    if not col_parcela_sistema: missing_cols.append("Parcela (Sistema)")
+    if not col_parcela_sistema: missing_cols.append("Parcela/Parc (Sistema)")
     if not col_valor_sistema: missing_cols.append("Valor (Sistema)")
 
     if missing_cols:
-         error_msg = f"Não foi possível encontrar colunas: {', '.join(missing_cols)}."
+         error_msg = f"Colunas não encontradas: {', '.join(missing_cols)}."
          print(f"📕 [ERRO] {error_msg}")
          raise ValueError(error_msg)
+         
+    if not (considerar_eql or considerar_parc or considerar_valor):
+        error_msg = "Pelo menos uma chave de comparação (EQL, Parcela, Valor) deve ser selecionada."
+        print(f"📕 [ERRO] {error_msg}")
+        raise ValueError(error_msg)
 
     print("📘 [LOG] Loop 1 (Pick Money): Contando 'Diário' (values_only)...")
     counter_diario = Counter()
@@ -702,8 +716,15 @@ def processar_repasse(diario_stream, sistema_stream):
         correcao = normalizar_valor_repasse(row[col_corrmonet_diario - 1]) if col_corrmonet_diario <= len(row) else 0.0
         total = round(principal + correcao, 2)
 
-        if eql and parcela:
-            counter_diario.update([(eql, parcela, total)])
+        # Constrói a chave dinâmica
+        key_parts = []
+        if considerar_eql: key_parts.append(eql)
+        if considerar_parc: key_parts.append(parcela)
+        if considerar_valor: key_parts.append(total)
+        
+        if len(key_parts) > 0: # Só conta se a chave não for vazia
+            chave_completa = tuple(key_parts)
+            counter_diario.update([chave_completa])
 
     print(f"📗 [LOG] Fim Loop 1. 'Diário' contado. {len(counter_diario)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
@@ -714,9 +735,15 @@ def processar_repasse(diario_stream, sistema_stream):
         parcela = str(row[col_parcela_sistema - 1]).strip() if col_parcela_sistema <= len(row) and row[col_parcela_sistema - 1] else ""
         valor = normalizar_valor_repasse(row[col_valor_sistema - 1]) if col_valor_sistema <= len(row) else 0.0
 
-        if eql and parcela:
-            # Chave do sistema usa (EQL, Parcela, Valor)
-            counter_sistema.update([(eql, parcela, valor)])
+        # Constrói a chave dinâmica
+        key_parts = []
+        if considerar_eql: key_parts.append(eql)
+        if considerar_parc: key_parts.append(parcela)
+        if considerar_valor: key_parts.append(valor)
+        
+        if len(key_parts) > 0:
+            chave_completa = tuple(key_parts)
+            counter_sistema.update([chave_completa])
 
     print(f"📗 [LOG] Fim Loop 2. 'Sistema' contado. {len(counter_sistema)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
@@ -743,12 +770,18 @@ def processar_repasse(diario_stream, sistema_stream):
 
             eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
             parcela = str(celula_parcela.value).strip() if celula_parcela and celula_parcela.value is not None else ""
-            if not eql or not parcela: continue
             
             principal = normalizar_valor_repasse(celula_principal.value if celula_principal else None)
             correcao = normalizar_valor_repasse(celula_correcao.value if celula_correcao else None)
             total = round(principal + correcao, 2)
-            chave_completa = (eql, parcela, total)
+            
+            # Reconstrói a chave
+            key_parts = []
+            if considerar_eql: key_parts.append(eql)
+            if considerar_parc: key_parts.append(parcela)
+            if considerar_valor: key_parts.append(total)
+            if not key_parts: continue # Pula linha se a chave for vazia
+            chave_completa = tuple(key_parts)
 
             vistos_diario.update([chave_completa])
 
@@ -757,11 +790,11 @@ def processar_repasse(diario_stream, sistema_stream):
                 chaves_iguais_dict[chave_completa] -= 1
             
             elif chave_completa in chaves_diario_apenas_dict and chaves_diario_apenas_dict[chave_completa] > 0:
-                nao_encontrados_diario.append((row_cells, "Não encontrado no 'Sistema' (ou duplicado no Diário)"))
+                nao_encontrados_diario.append((row_cells, f"Não encontrado no 'Sistema' (Chave: {chave_completa})"))
                 chaves_diario_apenas_dict[chave_completa] -= 1
             
             elif vistos_diario[chave_completa] > 1 and vistos_diario[chave_completa] > counter_diario.get(chave_completa, 0):
-                 divergentes.append((row_cells, f"Duplicado no 'Diário' (EQL {eql}, P {parcela}, V {total:.2f})"))
+                 divergentes.append((row_cells, f"Duplicado no 'Diário' (Chave: {chave_completa})"))
 
     print("📘 [LOG] Loop 4 (Pick Money): Classificando linhas do 'Sistema'...")
     if ws_sistema.max_row >= 2:
@@ -772,13 +805,19 @@ def processar_repasse(diario_stream, sistema_stream):
             
             eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
             parcela = str(celula_parcela.value).strip() if celula_parcela and celula_parcela.value is not None else ""
-            if not eql or not parcela: continue
             
             valor = normalizar_valor_repasse(celula_valor.value if celula_valor else None)
-            chave_completa = (eql, parcela, valor)
+            
+            # Reconstrói a chave
+            key_parts = []
+            if considerar_eql: key_parts.append(eql)
+            if considerar_parc: key_parts.append(parcela)
+            if considerar_valor: key_parts.append(valor)
+            if not key_parts: continue
+            chave_completa = tuple(key_parts)
             
             if chave_completa in chaves_sistema_apenas_dict and chaves_sistema_apenas_dict[chave_completa] > 0:
-                nao_encontrados_sistema.append((row_cells, f"Não encontrado no 'Diário' (ou duplicado no Sistema)"))
+                nao_encontrados_sistema.append((row_cells, f"Não encontrado no 'Diário' (Chave: {chave_completa})"))
                 chaves_sistema_apenas_dict[chave_completa] -= 1
 
     print(f"📗 [LOG] Fim Comparação Pick Money. Tempo: {time.time() - start_time:.2f}s")
@@ -788,7 +827,6 @@ def processar_repasse(diario_stream, sistema_stream):
     divergentes_stream = criar_planilha_saida(divergentes, ws_diario, incluir_status=True)
     
     nao_encontrados_combinados = nao_encontrados_diario + nao_encontrados_sistema
-    # Usa ws_diario como modelo para a planilha combinada
     nao_encontrados_stream = criar_planilha_saida(nao_encontrados_combinados, ws_diario, incluir_status=True)
 
     timestamp_str = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
@@ -810,11 +848,11 @@ def processar_repasse(diario_stream, sistema_stream):
     return pasta_saida, len(iguais), len(divergentes), count_nao_encontrados
 
 # =======================================================
-# === FUNÇÃO ABRASMA ATUALIZADA COM CONTADOR ===
+# === FUNÇÃO ABRASMA ATUALIZADA (DINÂMICA) ===
 # =======================================================
-def processar_repasse_abrasma(anterior_stream, complementar_stream):
-    """Lógica de conciliação Abrasma (Anterior vs Complementar) - Lógica de Contador."""
-    print("📘 [LOG] Início de processar_repasse_abrasma")
+def processar_repasse_abrasma(anterior_stream, complementar_stream, considerar_eql, considerar_parc, considerar_valor):
+    """Lógica de conciliação Abrasma (Anterior vs Complementar) - Lógica de Contador Dinâmico."""
+    print(f"📘 [LOG] Início de processar_repasse_abrasma com Lógica Dinâmica: EQL={considerar_eql}, Parc={considerar_parc}, Valor={considerar_valor}")
     start_time = time.time()
 
     print("📘 [LOG] Carregando workbook 'Planilha Anterior'...")
@@ -828,53 +866,78 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     print(f"📗 [LOG] 'Complementar' carregada ({ws_comp.max_row} linhas).")
 
     print("📘 [LOG] Achando colunas (Abrasma)...")
-    col_eql_ant = achar_coluna(ws_ant, "EQL")
-    col_parc_ant = achar_coluna(ws_ant, "Parc")
-    col_total_ant = achar_coluna(ws_ant, "Total Recebido")
+    # Nomes de coluna flexíveis
+    col_eql_ant = achar_coluna_flex(ws_ant, ["eql"])
+    col_parc_ant = achar_coluna_flex(ws_ant, ["parc", "parcela"])
+    col_total_ant = achar_coluna_flex(ws_ant, ["total recebido"])
 
-    col_eql_comp = achar_coluna(ws_comp, "EQL")
-    col_parc_comp = achar_coluna(ws_comp, "Parc")
-    col_total_comp = achar_coluna(ws_comp, "Total Recebido")
+    col_eql_comp = achar_coluna_flex(ws_comp, ["eql"])
+    col_parc_comp = achar_coluna_flex(ws_comp, ["parc", "parcela"])
+    col_total_comp = achar_coluna_flex(ws_comp, ["total recebido"])
 
     print(f"📗 [LOG] Colunas encontradas: Anterior(EQL:{col_eql_ant}, Parc:{col_parc_ant}, Total:{col_total_ant}), Complementar(EQL:{col_eql_comp}, Parc:{col_parc_comp}, Total:{col_total_comp})")
 
     missing_cols = []
-    if not col_eql_ant: missing_cols.append("EQL (Anterior)")
-    if not col_parc_ant: missing_cols.append("Parc (Anterior)")
-    if not col_total_ant: missing_cols.append("Total Recebido (Anterior)")
-    if not col_eql_comp: missing_cols.append("EQL (Complementar)")
-    if not col_parc_comp: missing_cols.append("Parc (Complementar)")
-    if not col_total_comp: missing_cols.append("Total Recebido (Complementar)")
+    if considerar_eql and not col_eql_ant: missing_cols.append("EQL (Anterior)")
+    if considerar_parc and not col_parc_ant: missing_cols.append("Parc/Parcela (Anterior)")
+    if considerar_valor and not col_total_ant: missing_cols.append("Total Recebido (Anterior)")
+    if considerar_eql and not col_eql_comp: missing_cols.append("EQL (Complementar)")
+    if considerar_parc and not col_parc_comp: missing_cols.append("Parc/Parcela (Complementar)")
+    if considerar_valor and not col_total_comp: missing_cols.append("Total Recebido (Complementar)")
 
     if missing_cols:
-         error_msg = f"Não foi possível encontrar as seguintes colunas obrigatórias: {', '.join(missing_cols)}. Verifique os nomes nos cabeçalhos."
+         error_msg = f"Colunas selecionadas não encontradas: {', '.join(missing_cols)}. Verifique os nomes nos cabeçalhos."
          print(f"📕 [ERRO] {error_msg}")
          raise ValueError(error_msg)
+         
+    if not (considerar_eql or considerar_parc or considerar_valor):
+        error_msg = "Pelo menos uma chave de comparação (EQL, Parcela, Valor) deve ser selecionada."
+        print(f"📕 [ERRO] {error_msg}")
+        raise ValueError(error_msg)
 
     print("📘 [LOG] Loop 1 (Abrasma): Contando 'Anterior' (values_only)...")
     counter_ant = Counter()
     for row in ws_ant.iter_rows(min_row=2, values_only=True):
-        eql = str(row[col_eql_ant - 1]).strip() if col_eql_ant <= len(row) and row[col_eql_ant - 1] else ""
-        parc = str(row[col_parc_ant - 1]).strip() if col_parc_ant <= len(row) and row[col_parc_ant - 1] else ""
-        total = normalizar_valor_repasse(row[col_total_ant - 1]) if col_total_ant <= len(row) else 0.0
+        # Constrói a chave dinâmica
+        key_parts = []
+        if considerar_eql:
+            eql = str(row[col_eql_ant - 1]).strip() if col_eql_ant <= len(row) and row[col_eql_ant - 1] else ""
+            key_parts.append(eql)
+        if considerar_parc:
+            parc = str(row[col_parc_ant - 1]).strip() if col_parc_ant <= len(row) and row[col_parc_ant - 1] else ""
+            key_parts.append(parc)
+        if considerar_valor:
+            total = normalizar_valor_repasse(row[col_total_ant - 1]) if col_total_ant <= len(row) else 0.0
+            key_parts.append(total)
 
-        if eql and parc:
-            counter_ant.update([(eql, parc, total)])
+        if len(key_parts) > 0 and any(key_parts): # Só conta se a chave não for vazia
+            chave_completa = tuple(key_parts)
+            counter_ant.update([chave_completa])
 
     print(f"📗 [LOG] Fim Loop 1. 'Anterior' contada. {len(counter_ant)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
     print("📘 [LOG] Loop 2 (Abrasma): Contando 'Complementar'...")
     counter_comp = Counter()
     for row in ws_comp.iter_rows(min_row=2, values_only=True):
-        eql = str(row[col_eql_comp - 1]).strip() if col_eql_comp <= len(row) and row[col_eql_comp - 1] else ""
-        parc = str(row[col_parc_comp - 1]).strip() if col_parc_comp <= len(row) and row[col_parc_comp - 1] else ""
-        total = normalizar_valor_repasse(row[col_total_comp - 1]) if col_total_comp <= len(row) else 0.0
-
-        if eql and parc:
-            counter_comp.update([(eql, parc, total)])
+        # Constrói a chave dinâmica
+        key_parts = []
+        if considerar_eql:
+            eql = str(row[col_eql_comp - 1]).strip() if col_eql_comp <= len(row) and row[col_eql_comp - 1] else ""
+            key_parts.append(eql)
+        if considerar_parc:
+            parc = str(row[col_parc_comp - 1]).strip() if col_parc_comp <= len(row) and row[col_parc_comp - 1] else ""
+            key_parts.append(parc)
+        if considerar_valor:
+            total = normalizar_valor_repasse(row[col_total_comp - 1]) if col_total_comp <= len(row) else 0.0
+            key_parts.append(total)
+        
+        if len(key_parts) > 0 and any(key_parts):
+            chave_completa = tuple(key_parts)
+            counter_comp.update([chave_completa])
 
     print(f"📗 [LOG] Fim Loop 2. 'Complementar' contada. {len(counter_comp)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
+    # Calcula as diferenças usando Contadores
     chaves_todas = set(counter_ant.keys()) | set(counter_comp.keys())
     
     chaves_iguais_dict = {k: min(counter_ant[k], counter_comp[k]) for k in chaves_todas if min(counter_ant[k], counter_comp[k]) > 0}
@@ -890,17 +953,23 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     vistos_ant = Counter()
     if ws_ant.max_row >= 2:
         for row_cells in ws_ant.iter_rows(min_row=2):
-            celula_eql = row_cells[col_eql_ant - 1] if col_eql_ant <= len(row_cells) else None
-            celula_parc = row_cells[col_parc_ant - 1] if col_parc_ant <= len(row_cells) else None
-            celula_total = row_cells[col_total_ant - 1] if col_total_ant <= len(row_cells) else None
-
-            eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
-            parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
-            if not eql or not parc: continue
+            key_parts = []
             
-            total = normalizar_valor_repasse(celula_total.value if celula_total else None)
-            chave_completa = (eql, parc, total)
+            if considerar_eql:
+                celula_eql = row_cells[col_eql_ant - 1] if col_eql_ant <= len(row_cells) else None
+                eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
+                key_parts.append(eql)
+            if considerar_parc:
+                celula_parc = row_cells[col_parc_ant - 1] if col_parc_ant <= len(row_cells) else None
+                parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
+                key_parts.append(parc)
+            if considerar_valor:
+                celula_total = row_cells[col_total_ant - 1] if col_total_ant <= len(row_cells) else None
+                total = normalizar_valor_repasse(celula_total.value if celula_total else None)
+                key_parts.append(total)
 
+            if not key_parts or not any(key_parts): continue
+            chave_completa = tuple(key_parts)
             vistos_ant.update([chave_completa])
 
             if chave_completa in chaves_iguais_dict and chaves_iguais_dict[chave_completa] > 0:
@@ -908,39 +977,44 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
                 chaves_iguais_dict[chave_completa] -= 1
             
             elif chave_completa in chaves_ant_apenas_dict and chaves_ant_apenas_dict[chave_completa] > 0:
-                nao_encontrados_ant.append((row_cells, "Não encontrado na 'Complementar' (ou duplicado no Anterior)"))
+                nao_encontrados_ant.append((row_cells, f"Não encontrado na 'Complementar' (Chave: {chave_completa})"))
                 chaves_ant_apenas_dict[chave_completa] -= 1
             
             elif vistos_ant[chave_completa] > 1 and vistos_ant[chave_completa] > counter_ant.get(chave_completa, 0):
-                 divergentes.append((row_cells, f"Duplicado na 'Anterior' (EQL {eql}, P {parc}, V {total:.2f})"))
+                 divergentes.append((row_cells, f"Duplicado na 'Anterior' (Chave: {chave_completa})"))
                       
     print("📘 [LOG] Loop 4 (Abrasma): Classificando linhas da 'Complementar'...")
     if ws_comp.max_row >= 2:
         for row_cells_comp in ws_comp.iter_rows(min_row=2):
-            celula_eql = row_cells_comp[col_eql_comp - 1] if col_eql_comp <= len(row_cells_comp) else None
-            celula_parc = row_cells_comp[col_parc_comp - 1] if col_parc_comp <= len(row_cells_comp) else None
-            celula_total = row_cells_comp[col_total_comp - 1] if col_total_comp <= len(row_cells_comp) else None
+            key_parts = []
             
-            eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
-            parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
-            if not eql or not parc: continue
+            if considerar_eql:
+                celula_eql = row_cells_comp[col_eql_comp - 1] if col_eql_comp <= len(row_cells_comp) else None
+                eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
+                key_parts.append(eql)
+            if considerar_parc:
+                celula_parc = row_cells_comp[col_parc_comp - 1] if col_parc_comp <= len(row_cells_comp) else None
+                parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
+                key_parts.append(parc)
+            if considerar_valor:
+                celula_total = row_cells_comp[col_total_comp - 1] if col_total_comp <= len(row_cells_comp) else None
+                total = normalizar_valor_repasse(celula_total.value if celula_total else None)
+                key_parts.append(total)
+
+            if not key_parts or not any(key_parts): continue
+            chave_completa = tuple(key_parts)
             
-            total = normalizar_valor_repasse(celula_total.value if celula_total else None)
-            chave_completa = (eql, parc, total)
-            
-            # Adiciona à lista de "Não Encontrados" se for uma chave "só da complementar"
             if chave_completa in chaves_comp_apenas_dict and chaves_comp_apenas_dict[chave_completa] > 0:
-                nao_encontrados_comp.append((row_cells_comp, f"Não encontrado na 'Anterior' (ou duplicado na Complementar)"))
+                nao_encontrados_comp.append((row_cells_comp, f"Não encontrado na 'Anterior' (Chave: {chave_completa})"))
                 chaves_comp_apenas_dict[chave_completa] -= 1
 
     print(f"📗 [LOG] Fim Comparação Abrasma. Tempo: {time.time() - start_time:.2f}s")
 
     print("📘 [LOG] Criando planilhas de saída (Abrasma)...")
-    # Usa ws_ant (Planilha Anterior) como modelo para cabeçalho e formatação
     iguais_stream = criar_planilha_saida(iguais, ws_ant, incluir_status=False)
     divergentes_stream = criar_planilha_saida(divergentes, ws_ant, incluir_status=True)
-    # Combina "não encontrados" de ambos
     nao_encontrados_combinados = nao_encontrados_ant + nao_encontrados_comp
+    # Usa ws_ant como modelo, mas as linhas de nao_encontrados_comp virão de ws_comp
     nao_encontrados_stream = criar_planilha_saida(nao_encontrados_combinados, ws_ant, incluir_status=True)
 
     timestamp_str = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
@@ -1213,18 +1287,26 @@ def repasse_file():
              error_message=f"Por favor, envie apenas arquivos Excel ({', '.join(allowed_extensions)}).")
 
     print(f"📘 [LOG] Recebidos (Pick Money): {file_diario.filename}, {file_sistema.filename}")
-
+    
     try:
+        # Pega os valores dos checkboxes
+        considerar_eql = request.form.get('considerar_eql_pm') == 'on'
+        considerar_parc = request.form.get('considerar_parc_pm') == 'on'
+        considerar_valor = request.form.get('considerar_valor_pm') == 'on'
+        
         diario_stream = io.BytesIO(file_diario.read())
         sistema_stream = io.BytesIO(file_sistema.read())
         print(f"📘 [LOG] Arquivos Excel (Pick Money) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
 
-        # Chama a função de processamento Pick Money (com lógica de contador)
-        pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse(diario_stream, sistema_stream)
+        # Chama a função de processamento com os novos parâmetros
+        pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse(
+            diario_stream, sistema_stream, 
+            considerar_eql, considerar_parc, considerar_valor
+        )
 
         print(f"📘 [LOG] Processamento (Pick Money) concluído. Criando ZIP da pasta '{pasta_saida}'...")
         zip_stream = io.BytesIO()
-        timestamp_str = os.path.basename(pasta_saida).replace('repasse_pick_money_', '') # Corrigido
+        timestamp_str = os.path.basename(pasta_saida).replace('repasse_pick_money_', '')
 
         zip_arcname_iguais = "iguais.xlsx"
         zip_arcname_divergentes = "divergentes.xlsx"
@@ -1242,7 +1324,7 @@ def repasse_file():
         zip_stream.seek(0)
         print(f"📗 [LOG] ZIP (Pick Money) criado em memória.")
 
-        report_filename = f"repasse_pick_money_conciliado_{timestamp_str}.zip" # Corrigido
+        report_filename = f"repasse_pick_money_conciliado_{timestamp_str}.zip"
         report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
         try:
             with open(report_path, 'wb') as f:
@@ -1308,12 +1390,20 @@ def repasse_abrasma_file():
     print(f"📘 [LOG] Recebidos (Abrasma): {file_ant.filename}, {file_comp.filename}")
 
     try:
+        # Pega os valores dos checkboxes
+        considerar_eql = request.form.get('considerar_eql_ab') == 'on'
+        considerar_parc = request.form.get('considerar_parc_ab') == 'on'
+        considerar_valor = request.form.get('considerar_valor_ab') == 'on'
+
         anterior_stream = io.BytesIO(file_ant.read())
         complementar_stream = io.BytesIO(file_comp.read())
         print(f"📘 [LOG] Arquivos Excel (Abrasma) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
 
-        # Chama a função de processamento Abrasma (com lógica de contador)
-        pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse_abrasma(anterior_stream, complementar_stream)
+        # Chama a função de processamento Abrasma com os novos parâmetros
+        pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse_abrasma(
+            anterior_stream, complementar_stream,
+            considerar_eql, considerar_parc, considerar_valor
+        )
 
         print(f"📘 [LOG] Processamento (Abrasma) concluído. Criando ZIP da pasta '{pasta_saida}'...")
         zip_stream = io.BytesIO()
