@@ -28,7 +28,7 @@
                     <div><span class="badge bg-success fs-6 mt-1">__COUNT_IGUAIS__</span></div>
                 </div>
                 <div class="col-md-4 summary-item border-end border-secondary">
-                    <strong>Itens Divergentes</strong>
+                    <strong>Duplicados Internos</strong>
                     <div><span class="badge bg-danger fs-6 mt-1">__COUNT_DIVERGENTES__</span></div>
                 </div>
                 <div class="col-md-4 summary-item">
@@ -54,10 +54,11 @@
         <h4 class="alert-heading">Relatórios Gerados</h4>
         <p>O arquivo .zip contém três planilhas:</p>
         <ul>
-            <li><strong>iguais.xlsx:</strong> Contém todas as linhas do arquivo "Diário" que correspondem exatamente aos valores do arquivo "Sistema".</li>
-            <li><strong>divergentes.xlsx:</strong> Contém as linhas do "Diário" com valores diferentes dos encontrados no "Sistema" ou que estavam duplicadas no "Diário".</li>
-            <li><strong>nao_encontrados.xlsx:</strong> Contém todas as linhas que existem apenas no arquivo "Diário" ou apenas no arquivo "Sistema".</li>
+            <li><strong>iguais.xlsx:</strong> Contém todas as linhas exatas (EQL, Parcela e Valor*) que foram encontradas em ambas as planilhas.</li>
+            <li><strong>divergentes.xlsx:</strong> Contém linhas que são duplicadas *dentro* de uma mesma planilha (ex: 3 linhas com a mesma chave, quando a outra planilha só tem 2).</li>
+            <li><strong>nao_encontrados.xlsx:</strong> Contém todas as linhas que existem *apenas* na planilha 1 ou *apenas* na planilha 2.</li>
         </ul>
+         <small class="text-muted">* A comparação exata depende das caixas "Considerar:" que você marcou.</small>
     </div>
 
 </div>
