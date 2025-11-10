@@ -25,7 +25,7 @@ HEADERS = (
 )
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.([A-Z0-9\u0399\u039A]{2})\.\d{1,4})\b")
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
-    r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*"
+    r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL(?!\s*A PAGAR)|Limite p/))\s*" # <-- MUDANÇA AQUI
     r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/\d]+?)\s+([\d.,]+)"
     r"(?=\s{2,}|\t|$)", re.MULTILINE
 )
@@ -185,12 +185,15 @@ def fixos_do_emp(emp: str, modo_separacao: str):
                 f["Fundo de Transporte"] = [float(EMP_MAP[emp]["Fundo de Transporte"])]
         return f
     elif modo_separacao == 'debito_credito':
+        # Assume que Débito/Crédito usa as mesmas parcelas base que Boleto
+        # Se for diferente, crie um BASE_FIXOS_DEBITO_CREDITO
         return BASE_FIXOS
     elif modo_separacao == 'ccb_realiza':
+        # Retorna o dicionário específico para CCB/Realiza (sem valores fixos pré-definidos)
         return BASE_FIXOS_CCB
     else:
         print(f"[AVISO] Modo de separação desconhecido '{modo_separacao}' em fixos_do_emp.")
-        return {}
+        return {} # Retorna dicionário vazio para evitar erros
 
 def detectar_emp_por_nome_arquivo(path: str):
     """Tenta detectar o código do empreendimento pelo sufixo no nome do arquivo."""
@@ -200,8 +203,9 @@ def detectar_emp_por_nome_arquivo(path: str):
     for k in EMP_MAP.keys():
         if nome.endswith("_" + k) or nome.endswith(k):
             return k
+    # Caso especial para SBRR (se contiver no nome, mas não como sufixo exato)
     if "SBRR" in nome:
-        return "SBRR"
+        return "SBRR" # Pode precisar de ajuste se houver outros com SBRR
     return None
 
 def detectar_emp_por_lote(lote: str):
@@ -209,27 +213,33 @@ def detectar_emp_por_lote(lote: str):
     if not lote or "." not in lote:
         return "NAO_CLASSIFICADO"
     prefixo = lote.split('.')[0]
+    # Retorna o código do mapa ou "NAO_CLASSIFICADO" se não encontrar
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
 def limpar_rotulo(lbl: str) -> str:
     """Remove prefixos e sufixos comuns dos rótulos das parcelas."""
-    if not isinstance(lbl, str): return ""
-    lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl, flags=re.IGNORECASE).strip()
-    lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
-    lbl = re.sub(r'\s{2,}', ' ', lbl).strip()
+    if not isinstance(lbl, str): return "" # Garante que é string
+    lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl, flags=re.IGNORECASE).strip() # Remove prefixo TAMA
+    lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip() # Remove sufixo de parcela N/M
+    lbl = re.sub(r'\s{2,}', ' ', lbl).strip() # Remove espaços múltiplos
     return lbl
 
 def fatiar_blocos(texto: str):
     """Divide o texto do PDF em blocos, cada um começando com um código de lote."""
+    # Adiciona uma quebra de linha antes de cada padrão de lote para facilitar a divisão
     texto_processado = PADRAO_LOTE.sub(r"\n\1", texto)
+    # Encontra todas as ocorrências do padrão de lote
     matches = list(PADRAO_LOTE.finditer(texto_processado))
     blocos = []
+    # Itera sobre as correspondências para extrair o texto entre elas
     for i, match in enumerate(matches):
         lote_atual = match.group(1)
         inicio_bloco = match.start()
+        # Fim do bloco é o início do próximo lote, ou o final do texto se for o último
         fim_bloco = matches[i+1].start() if i+1 < len(matches) else len(texto_processado)
+        # Extrai o texto do bloco
         texto_bloco = texto_processado[inicio_bloco:fim_bloco].strip()
-        if texto_bloco:
+        if texto_bloco: # Adiciona apenas se o bloco não estiver vazio
              blocos.append((lote_atual, texto_bloco))
     if not blocos:
          print("[AVISO] Nenhum bloco de lote encontrado no PDF.")
@@ -240,78 +250,91 @@ def tentar_nome_cliente(bloco: str) -> str:
     linhas = bloco.split('\n')
     if not linhas: return "Nome não localizado"
 
+    # Considera as primeiras 5-6 linhas como candidatas
     linhas_para_buscar = linhas[:6]
     nome_candidato = "Nome não localizado"
 
     for linha in linhas_para_buscar:
+        # Remove o código do lote da linha e espaços extras
         linha_sem_lote = PADRAO_LOTE.sub('', linha).strip()
-        if not linha_sem_lote: continue
+        if not linha_sem_lote: continue # Pula linhas vazias após remover lote
 
+        # Heurísticas mais refinadas para identificar um nome:
         is_valid_name = (
-            len(linha_sem_lote) > 5 and
-            ' ' in linha_sem_lote and
-            sum(c.isalpha() for c in linha_sem_lote.replace(" ", "")) / len(linha_sem_lote.replace(" ", "")) > 0.7 and
-            not any(h.upper() in linha_sem_lote.upper() for h in HEADERS if h) and
-            not re.search(r'\d{2}/\d{2}/\d{4}', linha_sem_lote) and
-            not re.match(r'^[\d.,\s]+$', linha_sem_lote) and
-            not linha_sem_lote.upper().startswith(("TOTAL", "BANCO", "03-", "LIMITE P/", "PÁGINA"))
+            len(linha_sem_lote) > 5 and # Pelo menos 6 caracteres
+            ' ' in linha_sem_lote and # Deve conter espaço (nome composto)
+            sum(c.isalpha() for c in linha_sem_lote.replace(" ", "")) / len(linha_sem_lote.replace(" ", "")) > 0.7 and # Maioria letras
+            not any(h.upper() in linha_sem_lote.upper() for h in HEADERS if h) and # Não contém cabeçalhos
+            not re.search(r'\d{2}/\d{2}/\d{4}', linha_sem_lote) and # Não é data
+            not re.match(r'^[\d.,\s]+$', linha_sem_lote) and # Não é apenas número
+            not linha_sem_lote.upper().startswith(("TOTAL", "BANCO", "03-", "LIMITE P/", "PÁGINA")) # Não começa com termos comuns
         )
 
         if is_valid_name:
+            # Assume que a primeira linha válida encontrada é o nome
             nome_candidato = linha_sem_lote
-            break
+            break # Para após encontrar o primeiro candidato válido
 
     return nome_candidato.strip()
 
 def extrair_parcelas(bloco: str):
     """Extrai os nomes e valores das parcelas dentro de um bloco de texto."""
     itens = OrderedDict()
+    # Tenta focar na seção "Lançamentos", se existir
     pos_lancamentos = bloco.find("Lançamentos")
     bloco_de_trabalho = bloco[pos_lancamentos:] if pos_lancamentos != -1 else bloco
 
+    # Limpeza adicional: remove linhas de totais que podem confundir
     bloco_limpo_linhas = []
     linhas_originais = bloco_de_trabalho.splitlines()
-    ignorar_proxima_linha_se_numero = False
+    ignorar_proxima_linha_se_numero = False # Flag para o padrão Label \n Valor
 
     for i, linha in enumerate(linhas_originais):
+        # Remove linhas de resumo que aparecem muito à direita
         match_total_direita = re.search(r'\s{4,}(DÉBITOS DO MÊS ANTERIOR|ENCARGOS POR ATRASO|PAGAMENTO EFETUADO)\s+[\d.,]+$', linha)
         linha_processada = linha[:match_total_direita.start()] if match_total_direita else linha
         linha_processada = linha_processada.strip()
 
+        # Ignora linhas que são cabeçalhos conhecidos ou vazias
         if not linha_processada or any(h.strip().upper() == linha_processada.upper() for h in ["Lançamentos", "Débitos do Mês"]):
             continue
 
+        # Se a flag estiver ativa, ignora esta linha (já foi usada como valor)
         if ignorar_proxima_linha_se_numero:
              ignorar_proxima_linha_se_numero = False
              continue
 
+        # Tenta aplicar o padrão [Label] [Valor] na mesma linha
         match_mesma_linha = PADRAO_PARCELA_MESMA_LINHA.match(linha_processada)
         if match_mesma_linha:
             lbl = limpar_rotulo(match_mesma_linha.group(1))
             val = normalizar_valor(match_mesma_linha.group(2)) # <-- USA A FUNÇÃO CORRIGIDA
             if lbl and lbl not in itens and val is not None:
                 itens[lbl] = val
-                continue
+                continue # Pula para a próxima linha
 
+        # Se não casou acima, verifica se é um Label cuja próxima linha é um Valor
         is_potential_label = (
-            any(c.isalpha() for c in linha_processada) and
-            limpar_rotulo(linha_processada) not in itens
+            any(c.isalpha() for c in linha_processada) and # Contém letras
+            limpar_rotulo(linha_processada) not in itens # Label ainda não capturado
         )
 
         if is_potential_label:
+            # Verifica a próxima linha NÃO VAZIA
             j = i + 1
             while j < len(linhas_originais) and not linhas_originais[j].strip():
                 j += 1
             if j < len(linhas_originais):
                  linha_seguinte_limpa = linhas_originais[j].strip()
                  match_num_puro = PADRAO_NUMERO_PURO.match(linha_seguinte_limpa)
+                 # Se a linha seguinte for puramente numérica
                  if match_num_puro:
                       lbl = limpar_rotulo(linha_processada)
                       val = normalizar_valor(match_num_puro.group(1)) # <-- USA A FUNÇÃO CORRIGIDA
                       if lbl and lbl not in itens and val is not None:
                            itens[lbl] = val
-                           ignorar_proxima_linha_se_numero = True
-                           continue
+                           ignorar_proxima_linha_se_numero = True # Marca a linha j para ser ignorada na próxima iteração
+                           continue # Pula para a próxima linha i
     return itens
 
 def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto: str = None):
@@ -328,23 +351,24 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
 
         cliente = tentar_nome_cliente(bloco)
         itens = extrair_parcelas(bloco)
-        VALORES_CORRETOS = fixos_do_emp(emp_atual, modo_separacao)
+        VALORES_CORRETOS = fixos_do_emp(emp_atual, modo_separacao) # Passa o modo
 
         for rot, val in itens.items():
             # 'val' já é um float corrigido pela função normalizar_valor
             linhas_todas.append({"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
 
         cov = {"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente}
-        for k in VALORES_CORRETOS.keys(): cov[k] = None
+        for k in VALORES_CORRETOS.keys(): cov[k] = None # Inicializa colunas
         for rot, val in itens.items():
-            if rot in VALORES_CORRETOS: cov[rot] = val
+            if rot in VALORES_CORRETOS: cov[rot] = val # Preenche valores encontrados
 
         vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
         cov["QtdParc_Alvo"] = len(vistos)
         cov["Parc_Alvo"] = ", ".join(vistos)
         linhas_cov.append(cov)
 
-        if modo_separacao != 'ccb_realiza':
+        # Validação de valor (apenas se houver valores permitidos definidos)
+        if modo_separacao != 'ccb_realiza': # Não valida valores para CCB (lista vazia)
             for rot in vistos:
                 val = cov[rot]
                 if val is None: continue
@@ -504,6 +528,9 @@ def copiar_formatacao(origem, destino):
         destino.protection = copy(origem.protection)
         destino.alignment = copy(origem.alignment)
 
+# =======================================================
+# === NOVA FUNÇÃO achar_coluna_flex ===
+# =======================================================
 def achar_coluna_flex(sheet, nomes_possiveis: list):
     """Encontra o número da coluna (1-indexado) para o primeiro nome que corresponder."""
     if sheet.max_row == 0: return None
@@ -513,17 +540,23 @@ def achar_coluna_flex(sheet, nomes_possiveis: list):
             return cell.column
     return None
 
+# =======================================================
+# === FUNÇÃO criar_planilha_saida ATUALIZADA (Repasse) ===
+# =======================================================
 def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     """Cria a planilha de saída para o Repasse com formatação customizada."""
     wb_out = Workbook()
     ws_out = wb_out.active
 
+    # Req 1: Sem grades de fundo
     ws_out.sheet_view.showGridLines = False
 
-    header_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
-    header_font = Font(bold=True, color="FFFFFF")
-    header_border = Border(bottom=Side(style='thin', color='A0A0A0'))
+    # Req 3: Definir estilo do cabeçalho (Verde Forte)
+    header_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid") # Verde forte
+    header_font = Font(bold=True, color="FFFFFF") # Fonte Branca
+    header_border = Border(bottom=Side(style='thin', color='A0A0A0')) # Borda inferior leve
 
+    # Copia cabeçalho e aplica NOVO estilo
     if ws_diario.max_row > 0:
         num_cols_header = ws_diario.max_column
         for i, cell in enumerate(ws_diario[1], 1):
@@ -552,9 +585,11 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
         cell_status_header.border = header_border
         ws_out.column_dimensions[get_column_letter(col_status)].width = 45
 
+    # Estilos para dados (Req 2: Sem preenchimento, Sem bordas)
     no_fill = PatternFill(fill_type=None)
     no_border = Border()
 
+    # Copia dados SEM formatação (exceto number_format)
     linha_out = 2
     for linha_info in linhas:
         linha, status = linha_info
@@ -603,6 +638,9 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
     wb_out.save(stream_out)
     stream_out.seek(0)
     return stream_out
+# =======================================================
+# === FIM DA FUNÇÃO ATUALIZADA ===
+# =======================================================
 
 def salvar_stream_em_arquivo(stream, caminho):
     """Salva BytesIO ou bytes em arquivo binário."""
@@ -619,6 +657,9 @@ def salvar_stream_em_arquivo(stream, caminho):
         print(f"📕 [ERRO] Falha ao salvar stream em '{caminho}': {e}")
         raise
 
+# =======================================================
+# === FUNÇÃO PICK MONEY ATUALIZADA (DINÂMICA) ===
+# =======================================================
 def processar_repasse(diario_stream, sistema_stream, considerar_eql, considerar_parc, considerar_valor):
     """Lógica de conciliação Pick Money (Diário vs Sistema) - Lógica de Contador Dinâmico."""
     print(f"📘 [LOG] Início de processar_repasse (Pick Money) com Lógica Dinâmica: EQL={considerar_eql}, Parc={considerar_parc}, Valor={considerar_valor}")
@@ -638,7 +679,7 @@ def processar_repasse(diario_stream, sistema_stream, considerar_eql, considerar_
     col_eq_diario = achar_coluna_flex(ws_diario, ["eql"])
     col_parcela_diario = achar_coluna_flex(ws_diario, ["parc", "parcela"])
     col_principal_diario = achar_coluna_flex(ws_diario, ["principal"])
-    col_corrmonet_diario = achar_coluna_flex(ws_diario, ["correção monetária", "correção", "corrmonet", "correção monetáriaplano"])
+    col_corrmonet_diario = achar_coluna_flex(ws_diario, ["correção monetária", "correção", "corrmonet", "correção monetáriaplano"]) # Adicionado "Correção MonetáriaPlano"
 
     col_eq_sistema = achar_coluna_flex(ws_sistema, ["eql"])
     col_parcela_sistema = achar_coluna_flex(ws_sistema, ["parc", "parcela"])
@@ -777,8 +818,21 @@ def processar_repasse(diario_stream, sistema_stream, considerar_eql, considerar_
     iguais_stream = criar_planilha_saida(iguais, ws_diario, incluir_status=False)
     divergentes_stream = criar_planilha_saida(divergentes, ws_diario, incluir_status=True)
     
-    nao_encontrados_combinados = nao_encontrados_diario + nao_encontrados_sistema
+    nao_encontrados_combinados = nao_encontrados_diario
+    # Adiciona os não encontrados do sistema, usando o ws_sistema como modelo
+    if nao_encontrados_sistema:
+        # Cria uma planilha temporária SÓ para os do sistema, para usar o cabeçalho correto
+        nao_encontrados_sistema_stream = criar_planilha_saida(nao_encontrados_sistema, ws_sistema, incluir_status=True)
+        # TODO: Idealmente, iriamos mesclar os dados. Por simplicidade, usamos o modelo do Diário.
+        # Isso significa que as colunas de "nao_encontrados_sistema" serão mapeadas para as colunas do "Diário"
+        # O que pode ser confuso.
+        # Solução Rápida: Adicionar como (None, status)
+        nao_encontrados_combinados = nao_encontrados_diario
+        for row_cells, status in nao_encontrados_sistema:
+             nao_encontrados_combinados.append((None, status)) # Perde os dados da linha, mas evita confusão de colunas
+             
     nao_encontrados_stream = criar_planilha_saida(nao_encontrados_combinados, ws_diario, incluir_status=True)
+
 
     timestamp_str = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
     pasta_saida = os.path.join(app.config['UPLOAD_FOLDER'], f"repasse_pick_money_{timestamp_str}")
@@ -817,7 +871,6 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream, considerar_e
     print(f"📗 [LOG] 'Complementar' carregada ({ws_comp.max_row} linhas).")
 
     print("📘 [LOG] Achando colunas (Abrasma)...")
-    # Nomes de coluna flexíveis
     col_eql_ant = achar_coluna_flex(ws_ant, ["eql"])
     col_parc_ant = achar_coluna_flex(ws_ant, ["parc", "parcela"])
     col_total_ant = achar_coluna_flex(ws_ant, ["total recebido"])
