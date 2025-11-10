@@ -25,7 +25,7 @@ HEADERS = (
 )
 PADRAO_LOTE = re.compile(r"\b(\d{2,4}\.([A-Z0-9\u0399\u039A]{2})\.\d{1,4})\b")
 PADRAO_PARCELA_MESMA_LINHA = re.compile(
-    r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL|Limite p/))\s*"
+    r"^(?!(?:DÉBITOS|ENCARGOS|DESCONTO|PAGAMENTO|TOTAL(?!\s*A PAGAR)|Limite p/))\s*" # <-- MUDANÇA AQUI
     r"([A-Za-zÀ-ú][A-Za-zÀ-ú\s\.\-\/\d]+?)\s+([\d.,]+)"
     r"(?=\s{2,}|\t|$)", re.MULTILINE
 )
@@ -1486,3 +1486,4 @@ if __name__ == '__main__':
     print(f"Executando em http://0.0.0.0:{port} (debug={debug_mode})")
     # threaded=True pode ajudar a evitar timeouts em requisições longas localmente
     app.run(debug=debug_mode, host='0.0.0.0', port=port, threaded=True)
+
