@@ -1,4 +1,3 @@
-
 # -*- coding: utf-8 -*-
 import os
 import re
@@ -130,16 +129,47 @@ def extrair_texto_pdf(stream_pdf) -> str:
         traceback.print_exc() # Imprime o stack trace completo no log
         return "" # Retorna string vazia em caso de erro
 
-def to_float(s: str):
-    if s is None:
-        return None
+# =======================================================
+# === FUNÇÃO DE CONVERSÃO DE VALOR UNIFICADA E CORRIGIDA ===
+# =======================================================
+def normalizar_valor(valor):
+    """Converte string para float, lidando com formatos , e . como decimal."""
+    if valor is None:
+        return 0.0 # Retorna 0.0 para None para simplificar somas
+    if isinstance(valor, (int, float)):
+        return round(float(valor), 2)
+    
+    s_norm = str(valor).strip().replace("R$", "").replace(" ", "").replace("\xa0", "")
+    
+    has_comma = "," in s_norm
+    has_dot = "." in s_norm
+
+    if has_comma and has_dot:
+        # Formato 1.234,56 (vírgula é decimal)
+        if s_norm.rfind(',') > s_norm.rfind('.'):
+             s_norm = s_norm.replace(".", "").replace(",", ".")
+        # Formato 1,234.56 (ponto é decimal)
+        else:
+             s_norm = s_norm.replace(",", "")
+    elif has_comma:
+        # Formato 1234,56 (vírgula é decimal)
+        s_norm = s_norm.replace(",", ".")
+    elif has_dot:
+        # Formato 1234.56 (ponto é decimal)
+        # OU formato 8.054.23 (pontos são milhares E decimal) - PDF INCONSISTENTE
+        if s_norm.count('.') > 1:
+            # Remove todos os pontos, exceto o último
+            parts = s_norm.split('.')
+            s_norm = "".join(parts[:-1]) + "." + parts[-1]
+    
     try:
-        # Remove espaços extras, R$, pontos de milhar e substitui vírgula decimal por ponto
-        cleaned_s = str(s).strip().replace("R$", "").replace(".", "").replace(",", ".")
-        return float(cleaned_s)
-    except (ValueError, TypeError) as e:
-        # print(f"[AVISO] Falha ao converter '{s}' para float: {e}") # Log opcional
-        return None # Retorna None se a conversão falhar
+        return round(float(s_norm), 2)
+    except (ValueError, TypeError):
+        print(f"[AVISO] Falha ao normalizar valor: '{valor}' -> '{s_norm}'")
+        return 0.0 # Retorna 0.0 em caso de falha de conversão
+# =======================================================
+# === FIM DA FUNÇÃO UNIFICADA ===
+# =======================================================
 
 def fixos_do_emp(emp: str, modo_separacao: str):
     """Retorna o dicionário de parcelas fixas esperadas com base no empreendimento e modo."""
@@ -155,15 +185,12 @@ def fixos_do_emp(emp: str, modo_separacao: str):
                 f["Fundo de Transporte"] = [float(EMP_MAP[emp]["Fundo de Transporte"])]
         return f
     elif modo_separacao == 'debito_credito':
-        # Assume que Débito/Crédito usa as mesmas parcelas base que Boleto
-        # Se for diferente, crie um BASE_FIXOS_DEBITO_CREDITO
         return BASE_FIXOS
     elif modo_separacao == 'ccb_realiza':
-        # Retorna o dicionário específico para CCB/Realiza (sem valores fixos pré-definidos)
         return BASE_FIXOS_CCB
     else:
         print(f"[AVISO] Modo de separação desconhecido '{modo_separacao}' em fixos_do_emp.")
-        return {} # Retorna dicionário vazio para evitar erros
+        return {}
 
 def detectar_emp_por_nome_arquivo(path: str):
     """Tenta detectar o código do empreendimento pelo sufixo no nome do arquivo."""
@@ -173,9 +200,8 @@ def detectar_emp_por_nome_arquivo(path: str):
     for k in EMP_MAP.keys():
         if nome.endswith("_" + k) or nome.endswith(k):
             return k
-    # Caso especial para SBRR (se contiver no nome, mas não como sufixo exato)
     if "SBRR" in nome:
-        return "SBRR" # Pode precisar de ajuste se houver outros com SBRR
+        return "SBRR"
     return None
 
 def detectar_emp_por_lote(lote: str):
@@ -183,33 +209,27 @@ def detectar_emp_por_lote(lote: str):
     if not lote or "." not in lote:
         return "NAO_CLASSIFICADO"
     prefixo = lote.split('.')[0]
-    # Retorna o código do mapa ou "NAO_CLASSIFICADO" se não encontrar
     return CODIGO_EMP_MAP.get(prefixo, "NAO_CLASSIFICADO")
 
 def limpar_rotulo(lbl: str) -> str:
     """Remove prefixos e sufixos comuns dos rótulos das parcelas."""
-    if not isinstance(lbl, str): return "" # Garante que é string
-    lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl, flags=re.IGNORECASE).strip() # Remove prefixo TAMA
-    lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip() # Remove sufixo de parcela N/M
-    lbl = re.sub(r'\s{2,}', ' ', lbl).strip() # Remove espaços múltiplos
+    if not isinstance(lbl, str): return ""
+    lbl = re.sub(r"^TAMA\s*[-–—]\s*", "", lbl, flags=re.IGNORECASE).strip()
+    lbl = re.sub(r"\s+-\s+\d+/\d+$", "", lbl).strip()
+    lbl = re.sub(r'\s{2,}', ' ', lbl).strip()
     return lbl
 
 def fatiar_blocos(texto: str):
     """Divide o texto do PDF em blocos, cada um começando com um código de lote."""
-    # Adiciona uma quebra de linha antes de cada padrão de lote para facilitar a divisão
     texto_processado = PADRAO_LOTE.sub(r"\n\1", texto)
-    # Encontra todas as ocorrências do padrão de lote
     matches = list(PADRAO_LOTE.finditer(texto_processado))
     blocos = []
-    # Itera sobre as correspondências para extrair o texto entre elas
     for i, match in enumerate(matches):
         lote_atual = match.group(1)
         inicio_bloco = match.start()
-        # Fim do bloco é o início do próximo lote, ou o final do texto se for o último
         fim_bloco = matches[i+1].start() if i+1 < len(matches) else len(texto_processado)
-        # Extrai o texto do bloco
         texto_bloco = texto_processado[inicio_bloco:fim_bloco].strip()
-        if texto_bloco: # Adiciona apenas se o bloco não estiver vazio
+        if texto_bloco:
              blocos.append((lote_atual, texto_bloco))
     if not blocos:
          print("[AVISO] Nenhum bloco de lote encontrado no PDF.")
@@ -220,91 +240,78 @@ def tentar_nome_cliente(bloco: str) -> str:
     linhas = bloco.split('\n')
     if not linhas: return "Nome não localizado"
 
-    # Considera as primeiras 5-6 linhas como candidatas
     linhas_para_buscar = linhas[:6]
     nome_candidato = "Nome não localizado"
 
     for linha in linhas_para_buscar:
-        # Remove o código do lote da linha e espaços extras
         linha_sem_lote = PADRAO_LOTE.sub('', linha).strip()
-        if not linha_sem_lote: continue # Pula linhas vazias após remover lote
+        if not linha_sem_lote: continue
 
-        # Heurísticas mais refinadas para identificar um nome:
         is_valid_name = (
-            len(linha_sem_lote) > 5 and # Pelo menos 6 caracteres
-            ' ' in linha_sem_lote and # Deve conter espaço (nome composto)
-            sum(c.isalpha() for c in linha_sem_lote.replace(" ", "")) / len(linha_sem_lote.replace(" ", "")) > 0.7 and # Maioria letras
-            not any(h.upper() in linha_sem_lote.upper() for h in HEADERS if h) and # Não contém cabeçalhos
-            not re.search(r'\d{2}/\d{2}/\d{4}', linha_sem_lote) and # Não é data
-            not re.match(r'^[\d.,\s]+$', linha_sem_lote) and # Não é apenas número
-            not linha_sem_lote.upper().startswith(("TOTAL", "BANCO", "03-", "LIMITE P/", "PÁGINA")) # Não começa com termos comuns
+            len(linha_sem_lote) > 5 and
+            ' ' in linha_sem_lote and
+            sum(c.isalpha() for c in linha_sem_lote.replace(" ", "")) / len(linha_sem_lote.replace(" ", "")) > 0.7 and
+            not any(h.upper() in linha_sem_lote.upper() for h in HEADERS if h) and
+            not re.search(r'\d{2}/\d{2}/\d{4}', linha_sem_lote) and
+            not re.match(r'^[\d.,\s]+$', linha_sem_lote) and
+            not linha_sem_lote.upper().startswith(("TOTAL", "BANCO", "03-", "LIMITE P/", "PÁGINA"))
         )
 
         if is_valid_name:
-            # Assume que a primeira linha válida encontrada é o nome
             nome_candidato = linha_sem_lote
-            break # Para após encontrar o primeiro candidato válido
+            break
 
     return nome_candidato.strip()
 
 def extrair_parcelas(bloco: str):
     """Extrai os nomes e valores das parcelas dentro de um bloco de texto."""
     itens = OrderedDict()
-    # Tenta focar na seção "Lançamentos", se existir
     pos_lancamentos = bloco.find("Lançamentos")
     bloco_de_trabalho = bloco[pos_lancamentos:] if pos_lancamentos != -1 else bloco
 
-    # Limpeza adicional: remove linhas de totais que podem confundir
     bloco_limpo_linhas = []
     linhas_originais = bloco_de_trabalho.splitlines()
-    ignorar_proxima_linha_se_numero = False # Flag para o padrão Label \n Valor
+    ignorar_proxima_linha_se_numero = False
 
     for i, linha in enumerate(linhas_originais):
-        # Remove linhas de resumo que aparecem muito à direita
         match_total_direita = re.search(r'\s{4,}(DÉBITOS DO MÊS ANTERIOR|ENCARGOS POR ATRASO|PAGAMENTO EFETUADO)\s+[\d.,]+$', linha)
         linha_processada = linha[:match_total_direita.start()] if match_total_direita else linha
         linha_processada = linha_processada.strip()
 
-        # Ignora linhas que são cabeçalhos conhecidos ou vazias
         if not linha_processada or any(h.strip().upper() == linha_processada.upper() for h in ["Lançamentos", "Débitos do Mês"]):
             continue
 
-        # Se a flag estiver ativa, ignora esta linha (já foi usada como valor)
         if ignorar_proxima_linha_se_numero:
              ignorar_proxima_linha_se_numero = False
              continue
 
-        # Tenta aplicar o padrão [Label] [Valor] na mesma linha
         match_mesma_linha = PADRAO_PARCELA_MESMA_LINHA.match(linha_processada)
         if match_mesma_linha:
             lbl = limpar_rotulo(match_mesma_linha.group(1))
-            val = to_float(match_mesma_linha.group(2))
+            val = normalizar_valor(match_mesma_linha.group(2)) # <-- USA A FUNÇÃO CORRIGIDA
             if lbl and lbl not in itens and val is not None:
                 itens[lbl] = val
-                continue # Pula para a próxima linha
+                continue
 
-        # Se não casou acima, verifica se é um Label cuja próxima linha é um Valor
         is_potential_label = (
-            any(c.isalpha() for c in linha_processada) and # Contém letras
-            limpar_rotulo(linha_processada) not in itens # Label ainda não capturado
+            any(c.isalpha() for c in linha_processada) and
+            limpar_rotulo(linha_processada) not in itens
         )
 
         if is_potential_label:
-            # Verifica a próxima linha NÃO VAZIA
             j = i + 1
             while j < len(linhas_originais) and not linhas_originais[j].strip():
                 j += 1
             if j < len(linhas_originais):
                  linha_seguinte_limpa = linhas_originais[j].strip()
                  match_num_puro = PADRAO_NUMERO_PURO.match(linha_seguinte_limpa)
-                 # Se a linha seguinte for puramente numérica
                  if match_num_puro:
                       lbl = limpar_rotulo(linha_processada)
-                      val = to_float(match_num_puro.group(1))
+                      val = normalizar_valor(match_num_puro.group(1)) # <-- USA A FUNÇÃO CORRIGIDA
                       if lbl and lbl not in itens and val is not None:
                            itens[lbl] = val
-                           ignorar_proxima_linha_se_numero = True # Marca a linha j para ser ignorada na próxima iteração
-                           continue # Pula para a próxima linha i
+                           ignorar_proxima_linha_se_numero = True
+                           continue
     return itens
 
 def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto: str = None):
@@ -321,23 +328,23 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
 
         cliente = tentar_nome_cliente(bloco)
         itens = extrair_parcelas(bloco)
-        VALORES_CORRETOS = fixos_do_emp(emp_atual, modo_separacao) # Passa o modo
+        VALORES_CORRETOS = fixos_do_emp(emp_atual, modo_separacao)
 
         for rot, val in itens.items():
+            # 'val' já é um float corrigido pela função normalizar_valor
             linhas_todas.append({"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente, "Parcela": rot, "Valor": val})
 
         cov = {"Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente}
-        for k in VALORES_CORRETOS.keys(): cov[k] = None # Inicializa colunas
+        for k in VALORES_CORRETOS.keys(): cov[k] = None
         for rot, val in itens.items():
-            if rot in VALORES_CORRETOS: cov[rot] = val # Preenche valores encontrados
+            if rot in VALORES_CORRETOS: cov[rot] = val
 
         vistos = [k for k in VALORES_CORRETOS if cov[k] is not None]
         cov["QtdParc_Alvo"] = len(vistos)
         cov["Parc_Alvo"] = ", ".join(vistos)
         linhas_cov.append(cov)
 
-        # Validação de valor (apenas se houver valores permitidos definidos)
-        if modo_separacao != 'ccb_realiza': # Não valida valores para CCB (lista vazia)
+        if modo_separacao != 'ccb_realiza':
             for rot in vistos:
                 val = cov[rot]
                 if val is None: continue
@@ -345,7 +352,7 @@ def processar_pdf_validacao(texto_pdf: str, modo_separacao: str, emp_fixo_boleto
                 if permitidos and all(abs(val - v) > 1e-6 for v in permitidos):
                     linhas_div.append({
                         "Empreendimento": emp_atual, "Lote": lote, "Cliente": cliente,
-                        "Parcela": rot, "Valor no Documento": float(val),
+                        "Parcela": rot, "Valor no Documento": float(val), # val já é float
                         "Valor Correto": " ou ".join(f"{v:.2f}" for v in permitidos)
                     })
 
@@ -360,7 +367,7 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     df_todas_ant_raw, _, _ = processar_pdf_validacao(texto_anterior, modo_separacao, emp_fixo_boleto)
     df_todas_atu_raw, _, _ = processar_pdf_validacao(texto_atual, modo_separacao, emp_fixo_boleto)
 
-    # Extrai totais
+    # Extrai totais (agora com valores corretos de normalizar_valor)
     df_totais_ant = df_todas_ant_raw[df_todas_ant_raw['Parcela'].astype(str).str.strip().str.upper() == 'TOTAL A PAGAR'].copy()
     df_totais_ant = df_totais_ant[['Empreendimento', 'Lote', 'Cliente', 'Valor']].rename(columns={'Valor': 'Total Anterior'})
 
@@ -420,11 +427,12 @@ def processar_comparativo(texto_anterior, texto_atual, modo_separacao, emp_fixo_
     }
     df_resumo_completo = pd.DataFrame(resumo_financeiro_data)
 
-    # Retorna todos os DataFrames gerados (nomes corretos)
+    # Retorna todos os DataFrames gerados
     return df_resumo_completo, df_adicionados, df_removidos, df_divergencias, df_parcelas_novas, df_parcelas_removidas
 
 
 def formatar_excel(output_stream, dfs: dict):
+    """Formata planilhas de Validação e Comparação (não Repasse)."""
     from openpyxl.styles import Font, Alignment, PatternFill, Border, Side, NamedStyle
     from openpyxl.utils import get_column_letter
     import pandas as pd
@@ -433,7 +441,6 @@ def formatar_excel(output_stream, dfs: dict):
         for sheet_name, df in dfs.items():
             if df is None:
                 continue
-            # Salva o DataFrame na planilha
             if isinstance(df, pd.DataFrame):
                  df.to_excel(writer, index=False, sheet_name=sheet_name)
             else:
@@ -447,8 +454,7 @@ def formatar_excel(output_stream, dfs: dict):
             worksheet = writer.sheets[sheet_name]
             worksheet.sheet_view.showGridLines = False
 
-            if worksheet.max_row > 0 and worksheet.max_column > 0: # Verifica se há pelo menos o cabeçalho
-                # Aplica formatação e largura
+            if worksheet.max_row > 0 and worksheet.max_column > 0:
                 for col_idx, column_cells in enumerate(worksheet.columns, 1):
                     max_length = 0
                     column = get_column_letter(col_idx)
@@ -457,7 +463,6 @@ def formatar_excel(output_stream, dfs: dict):
                         if cell.value:
                              try:
                                  if isinstance(cell.value, (int, float)) and cell.number_format != 'General' and not is_first_row:
-                                     # Tenta formatar para estimar a largura
                                      if '##0.00' in cell.number_format:
                                          formatted_value = f"{cell.value:,.2f}"
                                      elif '0' == cell.number_format:
@@ -471,7 +476,7 @@ def formatar_excel(output_stream, dfs: dict):
                                   max_length = max(max_length, len(str(cell.value)))
 
 
-                        if not is_first_row: # Aplica estilos apenas aos dados
+                        if not is_first_row:
                              if isinstance(cell.value, float):
                                  cell.style = number_style
                              elif isinstance(cell.value, int):
@@ -482,33 +487,15 @@ def formatar_excel(output_stream, dfs: dict):
                         is_first_row = False
 
                     adjusted_width = (max_length + 2) * 1.15
-                    worksheet.column_dimensions[column].width = min(max(adjusted_width, 10), 60) # Min 10, Max 60
+                    worksheet.column_dimensions[column].width = min(max(adjusted_width, 10), 60)
 
-                # ===> ADICIONA O AUTOFILTRO <===
                 worksheet.auto_filter.ref = worksheet.dimensions
                 print(f"[LOG] Autofilter aplicado à planilha '{sheet_name}'. Ref: {worksheet.dimensions}")
-                # ==============================
     return output_stream
 
 
-def normalizar_valor_repasse(valor):
-    if valor is None:
-        return 0.0
-    if isinstance(valor, (int, float)):
-        return round(float(valor), 2)
-    s = str(valor).strip().replace("R$", "").replace(" ", "").replace("\xa0", "")
-    if "," in s and "." in s: # Formato 1.234,56
-        s = s.replace(".", "").replace(",", ".")
-    elif "," in s and "." not in s: # Formato 1234,56
-        s = s.replace(",", ".")
-    # Assume 1234.56 ou 1234
-    try:
-        return round(float(s), 2)
-    except ValueError:
-        print(f"[AVISO] Falha ao normalizar valor repasse: '{valor}' -> '{s}'")
-        return 0.0
-
 def copiar_formatacao(origem, destino):
+    """Copia toda a formatação de uma célula para outra."""
     if origem and hasattr(origem, 'has_style') and origem.has_style:
         destino.font = copy(origem.font)
         destino.border = copy(origem.border)
@@ -517,24 +504,35 @@ def copiar_formatacao(origem, destino):
         destino.protection = copy(origem.protection)
         destino.alignment = copy(origem.alignment)
 
-def achar_coluna(sheet, nome_coluna):
+def achar_coluna_flex(sheet, nomes_possiveis: list):
+    """Encontra o número da coluna (1-indexado) para o primeiro nome que corresponder."""
     if sheet.max_row == 0: return None
+    nomes_lower = [nome.lower() for nome in nomes_possiveis]
     for cell in sheet[1]:
-        if cell.value and str(cell.value).strip().lower() == nome_coluna.lower():
+        if cell.value and str(cell.value).strip().lower() in nomes_lower:
             return cell.column
     return None
 
 def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
+    """Cria a planilha de saída para o Repasse com formatação customizada."""
     wb_out = Workbook()
     ws_out = wb_out.active
 
-    # Copia cabeçalho e larguras
+    ws_out.sheet_view.showGridLines = False
+
+    header_fill = PatternFill(start_color="00B050", end_color="00B050", fill_type="solid")
+    header_font = Font(bold=True, color="FFFFFF")
+    header_border = Border(bottom=Side(style='thin', color='A0A0A0'))
+
     if ws_diario.max_row > 0:
         num_cols_header = ws_diario.max_column
         for i, cell in enumerate(ws_diario[1], 1):
             if cell:
                 novo = ws_out.cell(row=1, column=i, value=cell.value)
-                copiar_formatacao(cell, novo)
+                novo.fill = header_fill
+                novo.font = header_font
+                novo.border = header_border
+                
                 col_letter = get_column_letter(i)
                 if col_letter in ws_diario.column_dimensions:
                      ws_out.column_dimensions[col_letter].width = ws_diario.column_dimensions[col_letter].width
@@ -543,46 +541,54 @@ def criar_planilha_saida(linhas, ws_diario, incluir_status=False):
                  ws_out.cell(row=1, column=i, value=None)
     else:
         num_cols_header = 0
-        print("[AVISO] ws_diario estava vazio, nenhum cabeçalho copiado para planilha de saída.")
+        print("[AVISO] ws_diario (planilha modelo) estava vazio, nenhum cabeçalho copiado.")
 
     col_status = 0
     if incluir_status:
         col_status = num_cols_header + 1
         cell_status_header = ws_out.cell(row=1, column=col_status, value="Status")
-        cell_status_header.font = Font(bold=True)
-        ws_out.column_dimensions[get_column_letter(col_status)].width = 45 # Largura maior para status
+        cell_status_header.fill = header_fill
+        cell_status_header.font = header_font
+        cell_status_header.border = header_border
+        ws_out.column_dimensions[get_column_letter(col_status)].width = 45
 
-    # Copia dados
+    no_fill = PatternFill(fill_type=None)
+    no_border = Border()
+
     linha_out = 2
     for linha_info in linhas:
-        linha, status = linha_info # linha é (None,) ou (cell1, cell2, ...)
+        linha, status = linha_info
         
-        # Caso 1: Linha existe (vem do Diário/Anterior ou da Complementar corrigido)
         if linha is not None:
              for i, cell_data in enumerate(linha, 1):
                  try:
                      valor = cell_data.value if hasattr(cell_data, "value") else cell_data
                      novo = ws_out.cell(row=linha_out, column=i, value=valor)
-                     if hasattr(cell_data, "value"):
-                         copiar_formatacao(cell_data, novo)
+                     
+                     if hasattr(cell_data, "number_format") and cell_data.number_format:
+                         novo.number_format = cell_data.number_format
+                     
+                     novo.fill = no_fill
+                     novo.border = no_border
+                         
                  except Exception as e:
                       print(f"[Aviso] Erro ao processar célula {i} da linha {linha_out}: {e}. Valor: {cell_data}")
                       ws_out.cell(row=linha_out, column=i, value=f"ERRO: {e}")
         
-        # Adiciona o status em ambos os casos
         if incluir_status and col_status > 0:
-             ws_out.cell(row=linha_out, column=col_status, value=status)
+             cell_status_data = ws_out.cell(row=linha_out, column=col_status, value=status)
+             cell_status_data.fill = no_fill
+             cell_status_data.border = no_border
         
         linha_out += 1
 
-
-    # Adiciona total
     if incluir_status and len(linhas) > 0:
          total_cell = ws_out.cell(row=linha_out + 1, column=1)
          total_cell.value = f"Total divergentes/não encontrados: {len(linhas)}"
          total_cell.font = Font(bold=True)
+         total_cell.fill = no_fill
+         total_cell.border = no_border
 
-    # Adiciona autofiltro
     if ws_out.max_row > 0 and ws_out.max_column > 0:
         dimensoes = ws_out.dimensions
         if dimensoes == 'A1:A1' and ws_out.cell(1,1).value is None:
@@ -613,12 +619,9 @@ def salvar_stream_em_arquivo(stream, caminho):
         print(f"📕 [ERRO] Falha ao salvar stream em '{caminho}': {e}")
         raise
 
-# =======================================================
-# === FUNÇÃO PICKMONEY ATUALIZADA COM CONTADOR ===
-# =======================================================
-def processar_repasse(diario_stream, sistema_stream):
-    """Lógica de conciliação Pick Money (Diário vs Sistema) - Lógica de Contador."""
-    print("📘 [LOG] Início de processar_repasse (Pick Money) com Lógica de Contador")
+def processar_repasse(diario_stream, sistema_stream, considerar_eql, considerar_parc, considerar_valor):
+    """Lógica de conciliação Pick Money (Diário vs Sistema) - Lógica de Contador Dinâmico."""
+    print(f"📘 [LOG] Início de processar_repasse (Pick Money) com Lógica Dinâmica: EQL={considerar_eql}, Parc={considerar_parc}, Valor={considerar_valor}")
     start_time = time.time()
 
     print("📘 [LOG] Carregando workbook 'Diário'...")
@@ -632,38 +635,51 @@ def processar_repasse(diario_stream, sistema_stream):
     print(f"📗 [LOG] 'Sistema' carregado ({ws_sistema.max_row} linhas).")
 
     print("📘 [LOG] Achando colunas (Pick Money)...")
-    col_eq_diario = achar_coluna(ws_diario, "EQL")
-    col_parcela_diario = achar_coluna(ws_diario, "Parcela")
-    col_principal_diario = 4
-    col_corrmonet_diario = 9
+    col_eq_diario = achar_coluna_flex(ws_diario, ["eql"])
+    col_parcela_diario = achar_coluna_flex(ws_diario, ["parc", "parcela"])
+    col_principal_diario = achar_coluna_flex(ws_diario, ["principal"])
+    col_corrmonet_diario = achar_coluna_flex(ws_diario, ["correção monetária", "correção", "corrmonet", "correção monetáriaplano"])
 
-    col_eq_sistema = achar_coluna(ws_sistema, "EQL")
-    col_parcela_sistema = achar_coluna(ws_sistema, "Parcela")
-    col_valor_sistema = achar_coluna(ws_sistema, "Valor")
+    col_eq_sistema = achar_coluna_flex(ws_sistema, ["eql"])
+    col_parcela_sistema = achar_coluna_flex(ws_sistema, ["parc", "parcela"])
+    col_valor_sistema = achar_coluna_flex(ws_sistema, ["valor"])
 
     missing_cols = []
     if not col_eq_diario: missing_cols.append("EQL (Diário)")
-    if not col_parcela_diario: missing_cols.append("Parcela (Diário)")
+    if not col_parcela_diario: missing_cols.append("Parcela/Parc (Diário)")
+    if not col_principal_diario: missing_cols.append("Principal (Diário)")
+    if not col_corrmonet_diario: missing_cols.append("Correção (Diário)")
     if not col_eq_sistema: missing_cols.append("EQL (Sistema)")
-    if not col_parcela_sistema: missing_cols.append("Parcela (Sistema)")
+    if not col_parcela_sistema: missing_cols.append("Parcela/Parc (Sistema)")
     if not col_valor_sistema: missing_cols.append("Valor (Sistema)")
 
     if missing_cols:
-         error_msg = f"Não foi possível encontrar colunas: {', '.join(missing_cols)}."
+         error_msg = f"Colunas não encontradas: {', '.join(missing_cols)}."
          print(f"📕 [ERRO] {error_msg}")
          raise ValueError(error_msg)
+         
+    if not (considerar_eql or considerar_parc or considerar_valor):
+        error_msg = "Pelo menos uma chave de comparação (EQL, Parcela, Valor) deve ser selecionada."
+        print(f"📕 [ERRO] {error_msg}")
+        raise ValueError(error_msg)
 
     print("📘 [LOG] Loop 1 (Pick Money): Contando 'Diário' (values_only)...")
     counter_diario = Counter()
     for row in ws_diario.iter_rows(min_row=2, values_only=True):
         eql = str(row[col_eq_diario - 1]).strip() if col_eq_diario <= len(row) and row[col_eq_diario - 1] else ""
         parcela = str(row[col_parcela_diario - 1]).strip() if col_parcela_diario <= len(row) and row[col_parcela_diario - 1] else ""
-        principal = normalizar_valor_repasse(row[col_principal_diario - 1]) if col_principal_diario <= len(row) else 0.0
-        correcao = normalizar_valor_repasse(row[col_corrmonet_diario - 1]) if col_corrmonet_diario <= len(row) else 0.0
+        principal = normalizar_valor(row[col_principal_diario - 1]) if col_principal_diario <= len(row) else 0.0
+        correcao = normalizar_valor(row[col_corrmonet_diario - 1]) if col_corrmonet_diario <= len(row) else 0.0
         total = round(principal + correcao, 2)
 
-        if eql and parcela:
-            counter_diario.update([(eql, parcela, total)])
+        key_parts = []
+        if considerar_eql: key_parts.append(eql)
+        if considerar_parc: key_parts.append(parcela)
+        if considerar_valor: key_parts.append(total)
+        
+        if len(key_parts) > 0 and any(k for k in key_parts if k): # Só conta se a chave não for vazia
+            chave_completa = tuple(key_parts)
+            counter_diario.update([chave_completa])
 
     print(f"📗 [LOG] Fim Loop 1. 'Diário' contado. {len(counter_diario)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
@@ -672,10 +688,16 @@ def processar_repasse(diario_stream, sistema_stream):
     for row in ws_sistema.iter_rows(min_row=2, values_only=True):
         eql = str(row[col_eq_sistema - 1]).strip() if col_eq_sistema <= len(row) and row[col_eq_sistema - 1] else ""
         parcela = str(row[col_parcela_sistema - 1]).strip() if col_parcela_sistema <= len(row) and row[col_parcela_sistema - 1] else ""
-        valor = normalizar_valor_repasse(row[col_valor_sistema - 1]) if col_valor_sistema <= len(row) else 0.0
+        valor = normalizar_valor(row[col_valor_sistema - 1]) if col_valor_sistema <= len(row) else 0.0
 
-        if eql and parcela:
-            counter_sistema.update([(eql, parcela, valor)])
+        key_parts = []
+        if considerar_eql: key_parts.append(eql)
+        if considerar_parc: key_parts.append(parcela)
+        if considerar_valor: key_parts.append(valor)
+        
+        if len(key_parts) > 0 and any(k for k in key_parts if k):
+            chave_completa = tuple(key_parts)
+            counter_sistema.update([chave_completa])
 
     print(f"📗 [LOG] Fim Loop 2. 'Sistema' contado. {len(counter_sistema)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
@@ -686,7 +708,7 @@ def processar_repasse(diario_stream, sistema_stream):
     chaves_sistema_apenas_dict = {k: counter_sistema[k] - counter_diario.get(k, 0) for k in chaves_todas if counter_sistema[k] - counter_diario.get(k, 0) > 0}
     
     iguais = []
-    divergentes = [] # Para duplicatas internas
+    divergentes = []
     nao_encontrados_diario = []
     nao_encontrados_sistema = []
 
@@ -701,12 +723,17 @@ def processar_repasse(diario_stream, sistema_stream):
 
             eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
             parcela = str(celula_parcela.value).strip() if celula_parcela and celula_parcela.value is not None else ""
-            if not eql or not parcela: continue
             
-            principal = normalizar_valor_repasse(celula_principal.value if celula_principal else None)
-            correcao = normalizar_valor_repasse(celula_correcao.value if celula_correcao else None)
+            principal = normalizar_valor(celula_principal.value if celula_principal else None)
+            correcao = normalizar_valor(celula_correcao.value if celula_correcao else None)
             total = round(principal + correcao, 2)
-            chave_completa = (eql, parcela, total)
+            
+            key_parts = []
+            if considerar_eql: key_parts.append(eql)
+            if considerar_parc: key_parts.append(parcela)
+            if considerar_valor: key_parts.append(total)
+            if not key_parts or not any(k for k in key_parts if k): continue
+            chave_completa = tuple(key_parts)
 
             vistos_diario.update([chave_completa])
 
@@ -715,11 +742,11 @@ def processar_repasse(diario_stream, sistema_stream):
                 chaves_iguais_dict[chave_completa] -= 1
             
             elif chave_completa in chaves_diario_apenas_dict and chaves_diario_apenas_dict[chave_completa] > 0:
-                nao_encontrados_diario.append((row_cells, "Não encontrado no 'Sistema' (ou duplicado no Diário)"))
+                nao_encontrados_diario.append((row_cells, f"Não encontrado no 'Sistema' (Chave: {chave_completa})"))
                 chaves_diario_apenas_dict[chave_completa] -= 1
             
             elif vistos_diario[chave_completa] > 1 and vistos_diario[chave_completa] > counter_diario.get(chave_completa, 0):
-                 divergentes.append((row_cells, f"Duplicado no 'Diário' (EQL {eql}, P {parcela}, V {total:.2f})"))
+                 divergentes.append((row_cells, f"Duplicado no 'Diário' (Chave: {chave_completa})"))
 
     print("📘 [LOG] Loop 4 (Pick Money): Classificando linhas do 'Sistema'...")
     if ws_sistema.max_row >= 2:
@@ -730,13 +757,18 @@ def processar_repasse(diario_stream, sistema_stream):
             
             eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
             parcela = str(celula_parcela.value).strip() if celula_parcela and celula_parcela.value is not None else ""
-            if not eql or not parcela: continue
             
-            valor = normalizar_valor_repasse(celula_valor.value if celula_valor else None)
-            chave_completa = (eql, parcela, valor)
+            valor = normalizar_valor(celula_valor.value if celula_valor else None)
+            
+            key_parts = []
+            if considerar_eql: key_parts.append(eql)
+            if considerar_parc: key_parts.append(parcela)
+            if considerar_valor: key_parts.append(valor)
+            if not key_parts or not any(k for k in key_parts if k): continue
+            chave_completa = tuple(key_parts)
             
             if chave_completa in chaves_sistema_apenas_dict and chaves_sistema_apenas_dict[chave_completa] > 0:
-                nao_encontrados_sistema.append((row_cells, f"Não encontrado no 'Diário' (ou duplicado no Sistema)"))
+                nao_encontrados_sistema.append((row_cells, f"Não encontrado no 'Diário' (Chave: {chave_completa})"))
                 chaves_sistema_apenas_dict[chave_completa] -= 1
 
     print(f"📗 [LOG] Fim Comparação Pick Money. Tempo: {time.time() - start_time:.2f}s")
@@ -749,7 +781,7 @@ def processar_repasse(diario_stream, sistema_stream):
     nao_encontrados_stream = criar_planilha_saida(nao_encontrados_combinados, ws_diario, incluir_status=True)
 
     timestamp_str = pd.Timestamp.now().strftime('%Y%m%d_%H%M%S')
-    pasta_saida = os.path.join(app.config['UPLOAD_FOLDER'], f"repasse_pickmoney_{timestamp_str}")
+    pasta_saida = os.path.join(app.config['UPLOAD_FOLDER'], f"repasse_pick_money_{timestamp_str}")
     os.makedirs(pasta_saida, exist_ok=True)
     print(f"Pasta de saída criada: {pasta_saida}")
 
@@ -767,11 +799,11 @@ def processar_repasse(diario_stream, sistema_stream):
     return pasta_saida, len(iguais), len(divergentes), count_nao_encontrados
 
 # =======================================================
-# === FUNÇÃO ABRASMA ATUALIZADA COM CONTADOR ===
+# === FUNÇÃO ABRASMA ATUALIZADA (DINÂMICA) ===
 # =======================================================
-def processar_repasse_abrasma(anterior_stream, complementar_stream):
-    """Lógica de conciliação Abrasma (Anterior vs Complementar) - Lógica de Contador."""
-    print("📘 [LOG] Início de processar_repasse_abrasma")
+def processar_repasse_abrasma(anterior_stream, complementar_stream, considerar_eql, considerar_parc, considerar_valor):
+    """Lógica de conciliação Abrasma (Anterior vs Complementar) - Lógica de Contador Dinâmico."""
+    print(f"📘 [LOG] Início de processar_repasse_abrasma com Lógica Dinâmica: EQL={considerar_eql}, Parc={considerar_parc}, Valor={considerar_valor}")
     start_time = time.time()
 
     print("📘 [LOG] Carregando workbook 'Planilha Anterior'...")
@@ -784,51 +816,73 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     ws_comp = wb_comp.worksheets[0]
     print(f"📗 [LOG] 'Complementar' carregada ({ws_comp.max_row} linhas).")
 
-    print("📘 [LOG] Achando colunas (ABRASMA)...")
-    col_eql_ant = achar_coluna(ws_ant, "EQL")
-    col_parc_ant = achar_coluna(ws_ant, "Parc")
-    col_total_ant = achar_coluna(ws_ant, "Total Recebido")
+    print("📘 [LOG] Achando colunas (Abrasma)...")
+    # Nomes de coluna flexíveis
+    col_eql_ant = achar_coluna_flex(ws_ant, ["eql"])
+    col_parc_ant = achar_coluna_flex(ws_ant, ["parc", "parcela"])
+    col_total_ant = achar_coluna_flex(ws_ant, ["total recebido"])
 
-    col_eql_comp = achar_coluna(ws_comp, "EQL")
-    col_parc_comp = achar_coluna(ws_comp, "Parc")
-    col_total_comp = achar_coluna(ws_comp, "Total Recebido")
+    col_eql_comp = achar_coluna_flex(ws_comp, ["eql"])
+    col_parc_comp = achar_coluna_flex(ws_comp, ["parc", "parcela"])
+    col_total_comp = achar_coluna_flex(ws_comp, ["total recebido"])
 
     print(f"📗 [LOG] Colunas encontradas: Anterior(EQL:{col_eql_ant}, Parc:{col_parc_ant}, Total:{col_total_ant}), Complementar(EQL:{col_eql_comp}, Parc:{col_parc_comp}, Total:{col_total_comp})")
 
     missing_cols = []
-    if not col_eql_ant: missing_cols.append("EQL (Anterior)")
-    if not col_parc_ant: missing_cols.append("Parc (Anterior)")
-    if not col_total_ant: missing_cols.append("Total Recebido (Anterior)")
-    if not col_eql_comp: missing_cols.append("EQL (Complementar)")
-    if not col_parc_comp: missing_cols.append("Parc (Complementar)")
-    if not col_total_comp: missing_cols.append("Total Recebido (Complementar)")
+    if considerar_eql and not col_eql_ant: missing_cols.append("EQL (Anterior)")
+    if considerar_parc and not col_parc_ant: missing_cols.append("Parc/Parcela (Anterior)")
+    if considerar_valor and not col_total_ant: missing_cols.append("Total Recebido (Anterior)")
+    if considerar_eql and not col_eql_comp: missing_cols.append("EQL (Complementar)")
+    if considerar_parc and not col_parc_comp: missing_cols.append("Parc/Parcela (Complementar)")
+    if considerar_valor and not col_total_comp: missing_cols.append("Total Recebido (Complementar)")
 
     if missing_cols:
-         error_msg = f"Não foi possível encontrar as seguintes colunas obrigatórias: {', '.join(missing_cols)}. Verifique os nomes nos cabeçalhos."
+         error_msg = f"Colunas selecionadas não encontradas: {', '.join(missing_cols)}. Verifique os nomes nos cabeçalhos."
          print(f"📕 [ERRO] {error_msg}")
          raise ValueError(error_msg)
+         
+    if not (considerar_eql or considerar_parc or considerar_valor):
+        error_msg = "Pelo menos uma chave de comparação (EQL, Parcela, Valor) deve ser selecionada."
+        print(f"📕 [ERRO] {error_msg}")
+        raise ValueError(error_msg)
 
     print("📘 [LOG] Loop 1 (Abrasma): Contando 'Anterior' (values_only)...")
     counter_ant = Counter()
     for row in ws_ant.iter_rows(min_row=2, values_only=True):
-        eql = str(row[col_eql_ant - 1]).strip() if col_eql_ant <= len(row) and row[col_eql_ant - 1] else ""
-        parc = str(row[col_parc_ant - 1]).strip() if col_parc_ant <= len(row) and row[col_parc_ant - 1] else ""
-        total = normalizar_valor_repasse(row[col_total_ant - 1]) if col_total_ant <= len(row) else 0.0
+        key_parts = []
+        if considerar_eql:
+            eql = str(row[col_eql_ant - 1]).strip() if col_eql_ant <= len(row) and row[col_eql_ant - 1] else ""
+            key_parts.append(eql)
+        if considerar_parc:
+            parc = str(row[col_parc_ant - 1]).strip() if col_parc_ant <= len(row) and row[col_parc_ant - 1] else ""
+            key_parts.append(parc)
+        if considerar_valor:
+            total = normalizar_valor(row[col_total_ant - 1]) if col_total_ant <= len(row) else 0.0
+            key_parts.append(total)
 
-        if eql and parc:
-            counter_ant.update([(eql, parc, total)])
+        if len(key_parts) > 0 and any(k for k in key_parts if k):
+            chave_completa = tuple(key_parts)
+            counter_ant.update([chave_completa])
 
     print(f"📗 [LOG] Fim Loop 1. 'Anterior' contada. {len(counter_ant)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
     print("📘 [LOG] Loop 2 (Abrasma): Contando 'Complementar'...")
     counter_comp = Counter()
     for row in ws_comp.iter_rows(min_row=2, values_only=True):
-        eql = str(row[col_eql_comp - 1]).strip() if col_eql_comp <= len(row) and row[col_eql_comp - 1] else ""
-        parc = str(row[col_parc_comp - 1]).strip() if col_parc_comp <= len(row) and row[col_parc_comp - 1] else ""
-        total = normalizar_valor_repasse(row[col_total_comp - 1]) if col_total_comp <= len(row) else 0.0
-
-        if eql and parc:
-            counter_comp.update([(eql, parc, total)])
+        key_parts = []
+        if considerar_eql:
+            eql = str(row[col_eql_comp - 1]).strip() if col_eql_comp <= len(row) and row[col_eql_comp - 1] else ""
+            key_parts.append(eql)
+        if considerar_parc:
+            parc = str(row[col_parc_comp - 1]).strip() if col_parc_comp <= len(row) and row[col_parc_comp - 1] else ""
+            key_parts.append(parc)
+        if considerar_valor:
+            total = normalizar_valor(row[col_total_comp - 1]) if col_total_comp <= len(row) else 0.0
+            key_parts.append(total)
+        
+        if len(key_parts) > 0 and any(k for k in key_parts if k):
+            chave_completa = tuple(key_parts)
+            counter_comp.update([chave_completa])
 
     print(f"📗 [LOG] Fim Loop 2. 'Complementar' contada. {len(counter_comp)} chaves únicas. Tempo: {time.time() - start_time:.2f}s")
 
@@ -839,7 +893,7 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     chaves_comp_apenas_dict = {k: counter_comp[k] - counter_ant.get(k, 0) for k in chaves_todas if counter_comp[k] - counter_ant.get(k, 0) > 0}
     
     iguais = []
-    divergentes = [] # Para duplicatas internas
+    divergentes = []
     nao_encontrados_ant = []
     nao_encontrados_comp = []
 
@@ -847,17 +901,23 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     vistos_ant = Counter()
     if ws_ant.max_row >= 2:
         for row_cells in ws_ant.iter_rows(min_row=2):
-            celula_eql = row_cells[col_eql_ant - 1] if col_eql_ant <= len(row_cells) else None
-            celula_parc = row_cells[col_parc_ant - 1] if col_parc_ant <= len(row_cells) else None
-            celula_total = row_cells[col_total_ant - 1] if col_total_ant <= len(row_cells) else None
-
-            eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
-            parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
-            if not eql or not parc: continue
+            key_parts = []
             
-            total = normalizar_valor_repasse(celula_total.value if celula_total else None)
-            chave_completa = (eql, parc, total)
+            if considerar_eql:
+                celula_eql = row_cells[col_eql_ant - 1] if col_eql_ant <= len(row_cells) else None
+                eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
+                key_parts.append(eql)
+            if considerar_parc:
+                celula_parc = row_cells[col_parc_ant - 1] if col_parc_ant <= len(row_cells) else None
+                parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
+                key_parts.append(parc)
+            if considerar_valor:
+                celula_total = row_cells[col_total_ant - 1] if col_total_ant <= len(row_cells) else None
+                total = normalizar_valor(celula_total.value if celula_total else None)
+                key_parts.append(total)
 
+            if not key_parts or not any(k for k in key_parts if k): continue
+            chave_completa = tuple(key_parts)
             vistos_ant.update([chave_completa])
 
             if chave_completa in chaves_iguais_dict and chaves_iguais_dict[chave_completa] > 0:
@@ -865,38 +925,42 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
                 chaves_iguais_dict[chave_completa] -= 1
             
             elif chave_completa in chaves_ant_apenas_dict and chaves_ant_apenas_dict[chave_completa] > 0:
-                nao_encontrados_ant.append((row_cells, "Não encontrado na 'Complementar' (ou duplicado no Anterior)"))
+                nao_encontrados_ant.append((row_cells, f"Não encontrado na 'Complementar' (Chave: {chave_completa})"))
                 chaves_ant_apenas_dict[chave_completa] -= 1
             
             elif vistos_ant[chave_completa] > 1 and vistos_ant[chave_completa] > counter_ant.get(chave_completa, 0):
-                 divergentes.append((row_cells, f"Duplicado na 'Anterior' (EQL {eql}, P {parc}, V {total:.2f})"))
+                 divergentes.append((row_cells, f"Duplicado na 'Anterior' (Chave: {chave_completa})"))
                       
     print("📘 [LOG] Loop 4 (Abrasma): Classificando linhas da 'Complementar'...")
     if ws_comp.max_row >= 2:
         for row_cells_comp in ws_comp.iter_rows(min_row=2):
-            celula_eql = row_cells_comp[col_eql_comp - 1] if col_eql_comp <= len(row_cells_comp) else None
-            celula_parc = row_cells_comp[col_parc_comp - 1] if col_parc_comp <= len(row_cells_comp) else None
-            celula_total = row_cells_comp[col_total_comp - 1] if col_total_comp <= len(row_cells_comp) else None
+            key_parts = []
             
-            eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
-            parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
-            if not eql or not parc: continue
+            if considerar_eql:
+                celula_eql = row_cells_comp[col_eql_comp - 1] if col_eql_comp <= len(row_cells_comp) else None
+                eql = str(celula_eql.value).strip() if celula_eql and celula_eql.value is not None else ""
+                key_parts.append(eql)
+            if considerar_parc:
+                celula_parc = row_cells_comp[col_parc_comp - 1] if col_parc_comp <= len(row_cells_comp) else None
+                parc = str(celula_parc.value).strip() if celula_parc and celula_parc.value is not None else ""
+                key_parts.append(parc)
+            if considerar_valor:
+                celula_total = row_cells_comp[col_total_comp - 1] if col_total_comp <= len(row_cells_comp) else None
+                total = normalizar_valor(celula_total.value if celula_total else None)
+                key_parts.append(total)
+
+            if not key_parts or not any(k for k in key_parts if k): continue
+            chave_completa = tuple(key_parts)
             
-            total = normalizar_valor_repasse(celula_total.value if celula_total else None)
-            chave_completa = (eql, parc, total)
-            
-            # Adiciona à lista de "Não Encontrados" se for uma chave "só da complementar"
             if chave_completa in chaves_comp_apenas_dict and chaves_comp_apenas_dict[chave_completa] > 0:
-                nao_encontrados_comp.append((row_cells_comp, f"Não encontrado na 'Anterior' (ou duplicado na Complementar)"))
+                nao_encontrados_comp.append((row_cells_comp, f"Não encontrado na 'Anterior' (Chave: {chave_completa})"))
                 chaves_comp_apenas_dict[chave_completa] -= 1
 
     print(f"📗 [LOG] Fim Comparação Abrasma. Tempo: {time.time() - start_time:.2f}s")
 
     print("📘 [LOG] Criando planilhas de saída (Abrasma)...")
-    # Usa ws_ant (Planilha Anterior) como modelo para cabeçalho e formatação
     iguais_stream = criar_planilha_saida(iguais, ws_ant, incluir_status=False)
     divergentes_stream = criar_planilha_saida(divergentes, ws_ant, incluir_status=True)
-    # Combina "não encontrados" de ambos
     nao_encontrados_combinados = nao_encontrados_ant + nao_encontrados_comp
     nao_encontrados_stream = criar_planilha_saida(nao_encontrados_combinados, ws_ant, incluir_status=True)
 
@@ -918,6 +982,8 @@ def processar_repasse_abrasma(anterior_stream, complementar_stream):
     print(f"✅ [LOG] Fim de processar_repasse (Abrasma). Totais: Iguais={len(iguais)}, Divergentes={len(divergentes)}, Não Encontrados={count_nao_encontrados}. Tempo total: {time.time() - start_time:.2f}s")
     return pasta_saida, len(iguais), len(divergentes), count_nao_encontrados
 
+
+# ==== ROTAS FLASK ====
 
 @app.route('/')
 def index():
@@ -1170,16 +1236,24 @@ def repasse_file():
     print(f"📘 [LOG] Recebidos (Pick Money): {file_diario.filename}, {file_sistema.filename}")
 
     try:
+        # Pega os valores dos checkboxes
+        considerar_eql = request.form.get('considerar_eql_pm') == 'on'
+        considerar_parc = request.form.get('considerar_parc_pm') == 'on'
+        considerar_valor = request.form.get('considerar_valor_pm') == 'on'
+        
         diario_stream = io.BytesIO(file_diario.read())
         sistema_stream = io.BytesIO(file_sistema.read())
         print(f"📘 [LOG] Arquivos Excel (Pick Money) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
 
-        # Chama a função de processamento PickMoney (com lógica de contador)
-        pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse(diario_stream, sistema_stream)
+        # Chama a função de processamento com os novos parâmetros
+        pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse(
+            diario_stream, sistema_stream, 
+            considerar_eql, considerar_parc, considerar_valor
+        )
 
         print(f"📘 [LOG] Processamento (Pick Money) concluído. Criando ZIP da pasta '{pasta_saida}'...")
         zip_stream = io.BytesIO()
-        timestamp_str = os.path.basename(pasta_saida).replace('repasse_pickmoney_', '')
+        timestamp_str = os.path.basename(pasta_saida).replace('repasse_pick_money_', '')
 
         zip_arcname_iguais = "iguais.xlsx"
         zip_arcname_divergentes = "divergentes.xlsx"
@@ -1197,7 +1271,7 @@ def repasse_file():
         zip_stream.seek(0)
         print(f"📗 [LOG] ZIP (Pick Money) criado em memória.")
 
-        report_filename = f"repasse_pickmoney_conciliado_{timestamp_str}.zip"
+        report_filename = f"repasse_pick_money_conciliado_{timestamp_str}.zip"
         report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
         try:
             with open(report_path, 'wb') as f:
@@ -1263,12 +1337,20 @@ def repasse_abrasma_file():
     print(f"📘 [LOG] Recebidos (Abrasma): {file_ant.filename}, {file_comp.filename}")
 
     try:
+        # Pega os valores dos checkboxes
+        considerar_eql = request.form.get('considerar_eql_ab') == 'on'
+        considerar_parc = request.form.get('considerar_parc_ab') == 'on'
+        considerar_valor = request.form.get('considerar_valor_ab') == 'on'
+
         anterior_stream = io.BytesIO(file_ant.read())
         complementar_stream = io.BytesIO(file_comp.read())
         print(f"📘 [LOG] Arquivos Excel (Abrasma) lidos em memória. Tempo: {time.time() - start_time_route:.2f}s")
 
-        # Chama a função de processamento ABRASMA (com lógica de contador)
-        pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse_abrasma(anterior_stream, complementar_stream)
+        # Chama a função de processamento Abrasma com os novos parâmetros
+        pasta_saida, count_iguais, count_divergentes, count_nao_encontrados = processar_repasse_abrasma(
+            anterior_stream, complementar_stream,
+            considerar_eql, considerar_parc, considerar_valor
+        )
 
         print(f"📘 [LOG] Processamento (Abrasma) concluído. Criando ZIP da pasta '{pasta_saida}'...")
         zip_stream = io.BytesIO()
@@ -1290,7 +1372,7 @@ def repasse_abrasma_file():
         zip_stream.seek(0)
         print(f"📗 [LOG] ZIP (Abrasma) criado em memória.")
 
-        report_filename = f"repasse_abrasma_{timestamp_str}.zip"
+        report_filename = f"repasse_abrasma_conciliado_{timestamp_str}.zip"
         report_path = os.path.join(app.config['UPLOAD_FOLDER'], report_filename)
         try:
             with open(report_path, 'wb') as f:
@@ -1329,6 +1411,7 @@ def download_file(filename):
      normalized_safe_path = os.path.normpath(safe_path)
      normalized_upload_folder = os.path.normpath(app.config['UPLOAD_FOLDER'])
 
+     # Adiciona 'os.sep' para garantir que não pegue pastas com nome parecido
      if not normalized_safe_path.startswith(normalized_upload_folder + os.sep) and normalized_safe_path != normalized_upload_folder :
          print(f" Tentativa de acesso a caminho inválido: {filename} (Normalizado: {normalized_safe_path} vs Base: {normalized_upload_folder})")
          return "Acesso negado.", 403
@@ -1344,7 +1427,9 @@ def download_file(filename):
 if __name__ == '__main__':
     print("Iniciando servidor Flask local...")
     port = int(os.environ.get('PORT', 8080))
+    # Verifica variável de ambiente FLASK_DEBUG para modo debug
     debug_mode = os.environ.get('FLASK_DEBUG') == '1'
+    # Usa host='0.0.0.0' para ser acessível na rede local ou pelo Render
     print(f"Executando em http://0.0.0.0:{port} (debug={debug_mode})")
+    # threaded=True pode ajudar a evitar timeouts em requisições longas localmente
     app.run(debug=debug_mode, host='0.0.0.0', port=port, threaded=True)
-
