@@ -41,7 +41,7 @@ EMP_MAP = {
     "RSCI": {"Melhoramentos": 250.42, "Fundo de Transporte": 9.00},
     "RSCII": {"Melhoramentos": 240.29, "Fundo de Transporte": 9.00},
     "RSCIII": {"Melhoramentos": 281.44, "Fundo de Transporte": 9.00},
-    "RSCIV": {"Melhoramentos": 303.60, "Fundo de Transporte": 9.00},
+    "RSCIV": {"Melhoramentos": 324.20, "Fundo de Transporte": 9.00},
     "IATE": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
     "MARINA": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
     "SBRRI": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
@@ -1486,3 +1486,4 @@ if __name__ == '__main__':
     print(f"Executando em http://0.0.0.0:{port} (debug={debug_mode})")
     # threaded=True pode ajudar a evitar timeouts em requisições longas localmente
     app.run(debug=debug_mode, host='0.0.0.0', port=port, threaded=True)
+
