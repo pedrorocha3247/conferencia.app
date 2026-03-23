@@ -38,9 +38,6 @@
             <li class="nav-item" role="presentation">
                 <button class="nav-link" id="comparativo-tab" data-bs-toggle="tab" data-bs-target="#comparativo-tab-pane" type="button">Comparação</button>
             </li>
-            <li class="nav-item" role="presentation">
-                <button class="nav-link" id="repasse-tab" data-bs-toggle="tab" data-bs-target="#repasse-tab-pane" type="button">Repasse</button>
-            </li>
         </ul>
 
         <div class="tab-content" id="myTabContent">
@@ -111,98 +108,7 @@
                     </div>
                 </form>
             </div>
-
-            <div class="tab-pane fade" id="repasse-tab-pane" role="tabpanel">
-                <h4 class="mb-3 text-center">Conciliação de Repasse</h4>
-                
-                <div class="mb-3">
-                    <label class="form-label fw-bold">1. Escolha o Tipo de Conciliação:</label>
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="tipo_repasse" id="tipo_pickmoney" value="pickmoney" checked>
-                        <label class="form-check-label" for="tipo_pickmoney">Pick Money</label>
-                    </div>
-                    <div class="form-check">
-                        <input class="form-check-input" type="radio" name="tipo_repasse" id="tipo_abrasma" value="abrasma">
-                        <label class="form-check-label" for="tipo_abrasma">Abrasma</label>
-                    </div>
-                </div>
-                
-                <hr>
-
-                <div id="form-container-pickmoney" style="display: block;">
-                    <p class="text-muted text-center mb-4">Envie as planilhas do Diário e do Sistema para conciliação.</p>
-                    <form id="repasse-form-pickmoney" action="/repasse" method="post" enctype="multipart/form-data">
-                        <div class="mb-3 mt-3">
-                            <label for="diario_file" class="form-label fw-bold">2. Envie a planilha "Diário" (.xlsx):</label>
-                            <input type="file" class="form-control" name="diario_file" id="diario_file_pickmoney" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
-                        </div>
-                        <div class="mb-3 mt-3">
-                            <label for="sistema_file" class="form-label fw-bold">3. Envie a planilha "Sistema" (.xlsx):</label>
-                            <input type="file" class="form-control" name="sistema_file" id="sistema_file_pickmoney" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
-                        </div>
-                        
-                        <div class="mb-3 mt-4">
-                             <label class="form-label fw-bold">4. Considerar:</label>
-                             <div class="d-flex justify-content-start">
-                                 <div class="form-check form-check-inline">
-                                     <input class="form-check-input" type="checkbox" name="considerar_eql_pm" id="considerar_eql_pm" value="on" checked>
-                                     <label class="form-check-label" for="considerar_eql_pm">EQL</label>
-                                 </div>
-                                 <div class="form-check form-check-inline">
-                                     <input class="form-check-input" type="checkbox" name="considerar_parc_pm" id="considerar_parc_pm" value="on" checked>
-                                     <label class="form-check-label" for="considerar_parc_pm">Parcela</label>
-                                 </div>
-                                 <div class="form-check form-check-inline">
-                                     <input class="form-check-input" type="checkbox" name="considerar_valor_pm" id="considerar_valor_pm" value="on" checked>
-                                     <label class="form-check-label" for="considerar_valor_pm">Valor</label>
-                                 </div>
-                             </div>
-                        </div>
-
-                        <div class="d-grid mt-4 mb-2">
-                            <button id="repasse-button-pickmoney" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar Pick Money</span></button>
-                        </div>
-                    </form>
-                </div>
-
-                <div id="form-container-abrasma" style="display: none;">
-                    <p class="text-muted text-center mb-4">Envie as planilhas Anterior e Complementar para conciliação.</p>
-                    <form id="repasse-form-abrasma" action="/repasse_abrasma" method="post" enctype="multipart/form-data">
-                        <div class="mb-3 mt-3">
-                            <label for="anterior_file" class="form-label fw-bold">2. Envie a "Planilha Anterior" (.xlsx):</label>
-                            <input type="file" class="form-control" name="anterior_file" id="anterior_file_abrasma" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
-                        </div>
-                        <div class="mb-3 mt-3">
-                            <label for="complementar_file" class="form-label fw-bold">3. Envie a "Planilha Complementar" (.xlsx):</label>
-                            <input type="file" class="form-control" name="complementar_file" id="complementar_file_abrasma" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required>
-                        </div>
-
-                        <div class="mb-3 mt-4">
-                             <label class="form-label fw-bold">4. Considerar:</label>
-                             <div class="d-flex justify-content-start">
-                                 <div class="form-check form-check-inline">
-                                     <input class="form-check-input" type="checkbox" name="considerar_eql_ab" id="considerar_eql_ab" value="on" checked>
-                                     <label class="form-check-label" for="considerar_eql_ab">EQL</label>
-                                 </div>
-                                 <div class="form-check form-check-inline">
-                                     <input class="form-check-input" type="checkbox" name="considerar_parc_ab" id="considerar_parc_ab" value="on" checked>
-                                     <label class="form-check-label" for="considerar_parc_ab">Parcela</label>
-                                 </div>
-                                 <div class="form-check form-check-inline">
-                                     <input class="form-check-input" type="checkbox" name="considerar_valor_ab" id="considerar_valor_ab" value="on" checked>
-                                     <label class="form-check-label" for="considerar_valor_ab">Valor</label>
-                                 </div>
-                             </div>
-                        </div>
-
-                        <div class="d-grid mt-4 mb-2">
-                            <button id="repasse-button-abrasma" type="submit" class="btn btn-primary btn-lg"><span class="button-text">Conciliar Abrasma</span></button>
-                        </div>
-                    </form>
-                </div>
-
-            </div>
-            </div>
+        </div>
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
@@ -210,6 +116,8 @@
         document.addEventListener('DOMContentLoaded', function() {
             const splashScreen = document.getElementById('splash-screen');
             const mainContent = document.getElementById('main-content');
+            
+            // Lógica do Splash Screen
             if (splashScreen && mainContent) {
                 setTimeout(() => {
                     splashScreen.style.opacity = '0';
@@ -225,20 +133,7 @@
                 const form = document.getElementById(formId);
                 const button = document.getElementById(buttonId);
                 if(form && button){
-                    form.addEventListener('submit', function(event) {
-                        
-                        // Validação customizada para os checkboxes
-                        let checkboxes = form.querySelectorAll('input[type="checkbox"]');
-                        if (checkboxes.length > 0) {
-                            let isOneChecked = Array.from(checkboxes).some(cb => cb.checked);
-                            if (!isOneChecked) {
-                                alert('Erro: Pelo menos uma opção em "Considerar" deve ser marcada.');
-                                event.preventDefault(); // Impede o envio do formulário
-                                return; // Para a execução
-                            }
-                        }
-
-                        // Se a validação passou, ativa o spinner
+                    form.addEventListener('submit', function() {
                         button.disabled = true;
                         const buttonText = button.querySelector('.button-text');
                         if (buttonText) {
@@ -247,61 +142,12 @@
                             button.innerHTML = '<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Processando...';
                         }
                     });
-                } else {
-                    console.warn(`Formulário ou botão não encontrado para spinner: ${formId}, ${buttonId}`);
                 }
             }
 
-            // Configura os spinners para os 3 formulários principais
+            // Configura os spinners para os formulários restantes
             setupFormSubmitSpinner('upload-form', 'submit-button');
             setupFormSubmitSpinner('compare-form', 'compare-button');
-            
-            // Configura os spinners para os *dois* formulários de repasse
-            setupFormSubmitSpinner('repasse-form-pickmoney', 'repasse-button-pickmoney');
-            setupFormSubmitSpinner('repasse-form-abrasma', 'repasse-button-abrasma');
-
-            // Seleciona os elementos da aba Repasse
-            const radioPickMoney = document.getElementById('tipo_pickmoney');
-            const radioAbrasma = document.getElementById('tipo_abrasma');
-            const formPickMoney = document.getElementById('form-container-pickmoney');
-            const formAbrasma = document.getElementById('form-container-abrasma');
-            
-            // Inputs de arquivo dos formulários
-            const inputDiario = document.getElementById('diario_file_pickmoney');
-            const inputSistema = document.getElementById('sistema_file_pickmoney');
-            const inputAnterior = document.getElementById('anterior_file_abrasma');
-            const inputComplementar = document.getElementById('complementar_file_abrasma');
-
-            // Lógica para alternar a visibilidade e o 'required' dos inputs
-            if (radioPickMoney && radioAbrasma && formPickMoney && formAbrasma) {
-                
-                function toggleRepasseForms() {
-                    if (radioPickMoney.checked) {
-                        formPickMoney.style.display = 'block';
-                        formAbrasma.style.display = 'none';
-                        // Ativa 'required' para Pick Money, desativa para Abrasma
-                        if (inputDiario) inputDiario.required = true;
-                        if (inputSistema) inputSistema.required = true;
-                        if (inputAnterior) inputAnterior.required = false;
-                        if (inputComplementar) inputComplementar.required = false;
-                    } else if (radioAbrasma.checked) {
-                        formPickMoney.style.display = 'none';
-                        formAbrasma.style.display = 'block';
-                        // Ativa 'required' para Abrasma, desativa para Pick Money
-                        if (inputDiario) inputDiario.required = false;
-                        if (inputSistema) inputSistema.required = false;
-                        if (inputAnterior) inputAnterior.required = true;
-                        if (inputComplementar) inputComplementar.required = true;
-                    }
-                }
-
-                // Adiciona os listeners
-                radioPickMoney.addEventListener('change', toggleRepasseForms);
-                radioAbrasma.addEventListener('change', toggleRepasseForms);
-                
-                // Garante que o estado inicial (Pick Money checked) esteja correto
-                toggleRepasseForms(); 
-            }
         });
     </script>
 </body>
