@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Configurações — Validador de Remessas</title>
+    <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background-color: #222; }
+        .container { max-width: 860px; margin-top: 30px; margin-bottom: 60px; }
+        .company-logo { display: block; margin: 0 auto 30px auto; max-height: 80px; width: auto; }
+        .section-card { background-color: #2a3137; border: 1px solid #4e5d6c; border-radius: .375rem; padding: 1.5rem; margin-bottom: 1.5rem; }
+        .section-title { font-size: .85rem; font-weight: bold; color: #adb5bd; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; border-bottom: 1px solid #4e5d6c; padding-bottom: .5rem; }
+        .table td, .table th { vertical-align: middle; }
+        .table input[type="number"] { background-color: #1a2027; border: 1px solid #4e5d6c; color: #fff; border-radius: .25rem; padding: .3rem .6rem; width: 120px; text-align: right; }
+        .table input[type="number"]:focus { outline: none; border-color: #2b90d9; box-shadow: 0 0 0 2px rgba(43,144,217,.25); }
+        .badge-emp { font-size: .8rem; font-weight: bold; background-color: #37404a; color: #e9ecef; padding: .35em .65em; border-radius: .25rem; letter-spacing: .03em; }
+        .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+
+    <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logo" class="company-logo">
+
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <div>
+            <h4 class="mb-0">Configurações</h4>
+            <small class="text-muted">Altere os valores utilizados na validação das remessas.</small>
+        </div>
+        <a href="/" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+    </div>
+
+    <!-- SEÇÃO 1: Valores por Empreendimento -->
+    <div class="section-card">
+        <div class="section-title">Valores por Empreendimento</div>
+        <p class="text-muted small mb-3">Melhoramentos e Fundo de Transporte variam por empreendimento.</p>
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Empreendimento</th>
+                    <th class="text-end">Melhoramentos (R$)</th>
+                    <th class="text-end">Fundo de Transporte (R$)</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-emp"></tbody>
+        </table>
+    </div>
+
+    <!-- SEÇÃO 2: Encargos Fixos Base -->
+    <div class="section-card">
+        <div class="section-title">Encargos Fixos Base</div>
+        <p class="text-muted small mb-3">Aplicados igualmente a todos os empreendimentos nos modos Boleto e Débito/Crédito.</p>
+        <table class="table table-sm table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th>Encargo</th>
+                    <th class="text-end">Valor (R$)</th>
+                </tr>
+            </thead>
+            <tbody id="tbody-fixos"></tbody>
+        </table>
+    </div>
+
+    <!-- Botão Salvar -->
+    <div class="d-grid">
+        <button id="btn-salvar" class="btn btn-primary btn-lg" onclick="salvar()">
+            <span id="btn-texto">Salvar Configurações</span>
+        </button>
+    </div>
+    <p class="text-muted text-center mt-3 small">Os valores entram em vigor imediatamente para toda a equipe.</p>
+
+</div>
+
+<!-- Toasts -->
+<div class="toast-container">
+    <div id="toast-ok" class="toast align-items-center text-bg-success border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body fw-bold">✓ Configurações salvas com sucesso!</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+    <div id="toast-erro" class="toast align-items-center text-bg-danger border-0" role="alert">
+        <div class="d-flex">
+            <div class="toast-body fw-bold" id="toast-erro-msg">Erro ao salvar.</div>
+            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+    const EMP_MAP    = "__EMP_MAP__";
+    const BASE_FIXOS = "__BASE_FIXOS__";
+
+    // Popula tabela de empreendimentos
+    const tbodyEmp = document.getElementById('tbody-emp');
+    for (const [emp, vals] of Object.entries(EMP_MAP)) {
+        tbodyEmp.insertAdjacentHTML('beforeend', `
+            <tr>
+                <td><span class="badge-emp">${emp}</span></td>
+                <td class="text-end">
+                    <input type="number" step="0.01" min="0" id="emp_${emp}_melh" value="${vals['Melhoramentos'].toFixed(2)}">
+                </td>
+                <td class="text-end">
+                    <input type="number" step="0.01" min="0" id="emp_${emp}_fundo" value="${vals['Fundo de Transporte'].toFixed(2)}">
+                </td>
+            </tr>`);
+    }
+
+    // Popula tabela de encargos fixos
+    const tbodyFixos = document.getElementById('tbody-fixos');
+    for (const [nome, val] of Object.entries(BASE_FIXOS)) {
+        const id = 'fixo_' + nome.replace(/[^a-zA-Z0-9]/g, '_');
+        tbodyFixos.insertAdjacentHTML('beforeend', `
+            <tr>
+                <td>${nome}</td>
+                <td class="text-end">
+                    <input type="number" step="0.01" min="0" id="${id}" data-nome="${nome}" value="${parseFloat(val).toFixed(2)}">
+                </td>
+            </tr>`);
+    }
+
+    function coletarDados() {
+        const empMap = {};
+        for (const emp of Object.keys(EMP_MAP)) {
+            empMap[emp] = {
+                "Melhoramentos":    parseFloat(document.getElementById(`emp_${emp}_melh`).value),
+                "Fundo de Transporte": parseFloat(document.getElementById(`emp_${emp}_fundo`).value),
+            };
+        }
+        const baseFixos = {};
+        document.querySelectorAll('#tbody-fixos input[type="number"]').forEach(inp => {
+            baseFixos[inp.dataset.nome] = parseFloat(inp.value);
+        });
+        return { EMP_MAP: empMap, BASE_FIXOS: baseFixos };
+    }
+
+    async function salvar() {
+        const btn  = document.getElementById('btn-salvar');
+        const txt  = document.getElementById('btn-texto');
+        btn.disabled = true;
+        txt.textContent = 'Salvando...';
+
+        try {
+            const resp = await fetch('/configuracoes/salvar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(coletarDados())
+            });
+            const data = await resp.json();
+            if (data.ok) {
+                new bootstrap.Toast(document.getElementById('toast-ok'), { delay: 3000 }).show();
+            } else {
+                document.getElementById('toast-erro-msg').textContent = 'Erro: ' + (data.erro || 'desconhecido');
+                new bootstrap.Toast(document.getElementById('toast-erro'), { delay: 4000 }).show();
+            }
+        } catch (e) {
+            document.getElementById('toast-erro-msg').textContent = 'Falha na requisição.';
+            new bootstrap.Toast(document.getElementById('toast-erro'), { delay: 4000 }).show();
+        } finally {
+            btn.disabled = false;
+            txt.textContent = 'Salvar Configurações';
+        }
+    }
+</script>
+
+</body>
+</html>
