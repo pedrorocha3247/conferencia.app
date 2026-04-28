@@ -6,7 +6,8 @@ import io
 import fitz  # PyMuPDF
 import pandas as pd
 from collections import OrderedDict, Counter # Importa o Counter
-from flask import Flask, request, send_file, url_for, make_response
+from flask import Flask, request, send_file, url_for, make_response, jsonify
+import json
 import traceback
 import openpyxl
 from openpyxl import Workbook, load_workbook
@@ -72,6 +73,43 @@ app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER_PATH
 # Cria o diretório usando o caminho absoluto
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 print(f"Pasta de Upload configurada em: {app.config['UPLOAD_FOLDER']}")
+
+CONFIG_PATH = os.path.join(app.root_path, 'config.json')
+
+CONFIG_PADRAO = {
+    "EMP_MAP": {
+        "NVI":    {"Melhoramentos": 205.61, "Fundo de Transporte": 9.00},
+        "NVII":   {"Melhoramentos": 245.47, "Fundo de Transporte": 9.00},
+        "RSCI":   {"Melhoramentos": 250.42, "Fundo de Transporte": 9.00},
+        "RSCII":  {"Melhoramentos": 240.29, "Fundo de Transporte": 9.00},
+        "RSCIII": {"Melhoramentos": 281.44, "Fundo de Transporte": 9.00},
+        "RSCIV":  {"Melhoramentos": 324.20, "Fundo de Transporte": 9.00},
+        "RSCV":   {"Melhoramentos": 280.00, "Fundo de Transporte": 9.00},
+        "IATE":   {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
+        "MARINA": {"Melhoramentos": 240.00, "Fundo de Transporte": 9.00},
+        "SBRRI":  {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+        "SBRRII": {"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+        "SBRRIII":{"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
+    },
+    "BASE_FIXOS": {
+        "Taxa de Conservação":           434.11,
+        "Contrib. Social SLIM":          321.00,
+        "Contribuição ABRASMA - Bronze":  20.00,
+        "Contribuição ABRASMA - Prata":   40.00,
+        "Contribuição ABRASMA - Ouro":    60.00,
+    }
+}
+
+def carregar_config() -> dict:
+    try:
+        with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return {k: dict(v) for k, v in CONFIG_PADRAO.items()}
+
+def salvar_config(config: dict):
+    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        json.dump(config, f, ensure_ascii=False, indent=2)
 
 def manual_render_template(template_name, status_code=200, **kwargs):
     template_path = os.path.join(app.root_path, 'templates', template_name)
@@ -173,34 +211,34 @@ def normalizar_valor(valor):
 
 def fixos_do_emp(emp: str, modo_separacao: str):
     """Retorna o dicionário de parcelas fixas esperadas com base no empreendimento e modo."""
+    cfg = carregar_config()
+    emp_map   = cfg.get('EMP_MAP', CONFIG_PADRAO['EMP_MAP'])
+    base_fixos = {k: [float(v)] for k, v in cfg.get('BASE_FIXOS', CONFIG_PADRAO['BASE_FIXOS']).items()}
+
     if modo_separacao == 'boleto':
-        if emp not in EMP_MAP:
-            return BASE_FIXOS # Retorna base se o empreendimento não tiver mapa específico
-        f = dict(BASE_FIXOS) # Cria cópia da base
-        # Adiciona/sobrescreve valores específicos do empreendimento
-        if EMP_MAP.get(emp):
-            if "Melhoramentos" in EMP_MAP[emp]:
-                f["Melhoramentos"] = [float(EMP_MAP[emp]["Melhoramentos"])]
-            if "Fundo de Transporte" in EMP_MAP[emp]:
-                f["Fundo de Transporte"] = [float(EMP_MAP[emp]["Fundo de Transporte"])]
+        if emp not in emp_map:
+            return base_fixos
+        f = dict(base_fixos)
+        if emp_map.get(emp):
+            if "Melhoramentos" in emp_map[emp]:
+                f["Melhoramentos"] = [float(emp_map[emp]["Melhoramentos"])]
+            if "Fundo de Transporte" in emp_map[emp]:
+                f["Fundo de Transporte"] = [float(emp_map[emp]["Fundo de Transporte"])]
         return f
     elif modo_separacao == 'debito_credito':
-        # Assume que Débito/Crédito usa as mesmas parcelas base que Boleto
-        # Se for diferente, crie um BASE_FIXOS_DEBITO_CREDITO
-        return BASE_FIXOS
+        return base_fixos
     elif modo_separacao == 'ccb_realiza':
-        # Retorna o dicionário específico para CCB/Realiza (sem valores fixos pré-definidos)
         return BASE_FIXOS_CCB
     else:
         print(f"[AVISO] Modo de separação desconhecido '{modo_separacao}' em fixos_do_emp.")
-        return {} # Retorna dicionário vazio para evitar erros
+        return {}
 
 def detectar_emp_por_nome_arquivo(path: str):
     """Tenta detectar o código do empreendimento pelo sufixo no nome do arquivo."""
     if not path: return None
     nome = os.path.splitext(os.path.basename(path))[0].upper()
-    # Verifica se termina com _CODIGO ou apenas CODIGO
-    for k in EMP_MAP.keys():
+    emp_map = carregar_config().get('EMP_MAP', CONFIG_PADRAO['EMP_MAP'])
+    for k in emp_map.keys():
         if nome.endswith("_" + k) or nome.endswith(k):
             return k
     # Caso especial para SBRR (se contiver no nome, mas não como sufixo exato)
@@ -1457,6 +1495,26 @@ def repasse_abrasma_file():
             error_title="Erro inesperado na conciliação (Abrasma)",
             error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {error_details}")
 
+
+@app.route('/configuracoes')
+def configuracoes():
+    cfg = carregar_config()
+    return manual_render_template(
+        'configuracoes.html',
+        emp_map=json.dumps(cfg.get('EMP_MAP', CONFIG_PADRAO['EMP_MAP']), ensure_ascii=False),
+        base_fixos=json.dumps(cfg.get('BASE_FIXOS', CONFIG_PADRAO['BASE_FIXOS']), ensure_ascii=False),
+    )
+
+@app.route('/configuracoes/salvar', methods=['POST'])
+def configuracoes_salvar():
+    try:
+        data = request.get_json(force=True)
+        emp_map   = {k: {"Melhoramentos": float(v["Melhoramentos"]), "Fundo de Transporte": float(v["Fundo de Transporte"])} for k, v in data.get('EMP_MAP', {}).items()}
+        base_fixos = {k: float(v) for k, v in data.get('BASE_FIXOS', {}).items()}
+        salvar_config({"EMP_MAP": emp_map, "BASE_FIXOS": base_fixos})
+        return jsonify({'ok': True})
+    except Exception as e:
+        return jsonify({'ok': False, 'erro': str(e)}), 500
 
 @app.route('/download/<filename>')
 def download_file(filename):
