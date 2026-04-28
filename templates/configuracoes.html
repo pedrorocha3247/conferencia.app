@@ -6,70 +6,261 @@
     <title>Configurações — Validador de Remessas</title>
     <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #222; }
-        .container { max-width: 860px; margin-top: 30px; margin-bottom: 60px; }
-        .company-logo { display: block; margin: 0 auto 30px auto; max-height: 80px; width: auto; }
-        .section-card { background-color: #2a3137; border: 1px solid #4e5d6c; border-radius: .375rem; padding: 1.5rem; margin-bottom: 1.5rem; }
-        .section-title { font-size: .85rem; font-weight: bold; color: #adb5bd; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 1rem; border-bottom: 1px solid #4e5d6c; padding-bottom: .5rem; }
-        .table td, .table th { vertical-align: middle; }
-        .table input[type="number"] { background-color: #1a2027; border: 1px solid #4e5d6c; color: #fff; border-radius: .25rem; padding: .3rem .6rem; width: 120px; text-align: right; }
-        .table input[type="number"]:focus { outline: none; border-color: #2b90d9; box-shadow: 0 0 0 2px rgba(43,144,217,.25); }
-        .badge-emp { font-size: .8rem; font-weight: bold; background-color: #37404a; color: #e9ecef; padding: .35em .65em; border-radius: .25rem; letter-spacing: .03em; }
-        .toast-container { position: fixed; top: 1rem; right: 1rem; z-index: 9999; }
+        body { background-color: #1a1f24; }
+
+        /* Layout */
+        .page-wrap { max-width: 960px; margin: 0 auto; padding: 2rem 1.25rem 4rem; }
+
+        /* Header */
+        .page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            padding-bottom: 1.5rem;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid #2e3740;
+        }
+        .page-logo { max-height: 52px; width: auto; }
+        .page-title { font-size: 1.1rem; font-weight: 600; color: #e9ecef; margin: 0 0 .2rem; }
+        .page-subtitle { font-size: .8rem; color: #6c757d; margin: 0; }
+        .header-actions { display: flex; gap: .5rem; align-items: center; }
+        .btn-action {
+            font-size: .78rem;
+            font-weight: 600;
+            letter-spacing: .04em;
+            padding: .35rem .85rem;
+            border-radius: .3rem;
+        }
+
+        /* Sections */
+        .section { margin-bottom: 1.5rem; }
+        .section-header {
+            font-size: .7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .1em;
+            color: #6c757d;
+            margin-bottom: .75rem;
+        }
+        .section-body {
+            background-color: #242a31;
+            border: 1px solid #2e3740;
+            border-radius: .4rem;
+            overflow: hidden;
+        }
+        .section-desc {
+            font-size: .8rem;
+            color: #6c757d;
+            padding: .85rem 1.1rem;
+            margin: 0;
+            border-bottom: 1px solid #2e3740;
+        }
+
+        /* Tables */
+        .cfg-table { width: 100%; border-collapse: collapse; }
+        .cfg-table thead th {
+            font-size: .72rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            color: #6c757d;
+            padding: .65rem 1.1rem;
+            border-bottom: 1px solid #2e3740;
+            white-space: nowrap;
+        }
+        .cfg-table thead th:not(:first-child) { text-align: right; }
+        .cfg-table tbody tr { border-bottom: 1px solid #2e3740; }
+        .cfg-table tbody tr:last-child { border-bottom: none; }
+        .cfg-table tbody tr:hover { background-color: rgba(255,255,255,.02); }
+        .cfg-table tbody td {
+            padding: .6rem 1.1rem;
+            font-size: .875rem;
+            color: #cdd5de;
+            vertical-align: middle;
+        }
+        .cfg-table tbody td:not(:first-child) { text-align: right; }
+        .emp-code {
+            font-family: 'Courier New', monospace;
+            font-size: .8rem;
+            font-weight: 700;
+            color: #e9ecef;
+            letter-spacing: .05em;
+        }
+        .cfg-input {
+            background-color: #1a1f24;
+            border: 1px solid #37404a;
+            border-radius: .3rem;
+            color: #e9ecef;
+            font-size: .875rem;
+            padding: .3rem .6rem;
+            text-align: right;
+            width: 115px;
+            transition: border-color .15s;
+        }
+        .cfg-input:focus {
+            outline: none;
+            border-color: #2b90d9;
+            box-shadow: 0 0 0 2px rgba(43,144,217,.18);
+        }
+        .cfg-input::placeholder { color: #37404a; }
+
+        /* Save area */
+        .save-area {
+            background-color: #242a31;
+            border: 1px solid #2e3740;
+            border-radius: .4rem;
+            padding: 1.1rem 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 1.5rem;
+        }
+        .save-note { font-size: .78rem; color: #6c757d; margin: 0; }
+        .btn-save {
+            background-color: #2b90d9;
+            border: none;
+            color: #fff;
+            font-weight: 600;
+            font-size: .875rem;
+            padding: .5rem 1.75rem;
+            border-radius: .3rem;
+            cursor: pointer;
+            letter-spacing: .03em;
+            transition: background-color .15s;
+            min-width: 160px;
+        }
+        .btn-save:hover:not(:disabled) { background-color: #2279ba; }
+        .btn-save:disabled { opacity: .6; cursor: default; }
+
+        /* History */
+        .hist-toggle {
+            background: none;
+            border: none;
+            padding: 0;
+            color: #6c757d;
+            font-size: .75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .07em;
+            cursor: pointer;
+            float: right;
+        }
+        .hist-toggle:hover { color: #adb5bd; }
+        .hist-table { width: 100%; border-collapse: collapse; font-size: .82rem; }
+        .hist-table th {
+            font-size: .68rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .08em;
+            color: #6c757d;
+            padding: .55rem 1.1rem;
+            border-bottom: 1px solid #2e3740;
+            white-space: nowrap;
+        }
+        .hist-table th:not(:first-child) { text-align: right; }
+        .hist-table td {
+            padding: .55rem 1.1rem;
+            color: #cdd5de;
+            border-bottom: 1px solid #2e3740;
+            vertical-align: middle;
+        }
+        .hist-table td:not(:first-child) { text-align: right; }
+        .hist-table tr:last-child td { border-bottom: none; }
+        .hist-date { font-size: .75rem; color: #6c757d; white-space: nowrap; }
+        .hist-campo { color: #adb5bd; }
+        .val-antes { color: #c0392b; font-family: 'Courier New', monospace; }
+        .val-depois { color: #27ae60; font-family: 'Courier New', monospace; }
+        .hist-group-date {
+            font-size: .7rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: #6c757d;
+            padding: .65rem 1.1rem .35rem;
+        }
+        .hist-empty {
+            text-align: center;
+            color: #6c757d;
+            font-size: .82rem;
+            padding: 1.5rem;
+        }
+
+        /* Toast */
+        .toast-container { position: fixed; top: 1.25rem; right: 1.25rem; z-index: 9999; }
+        .toast { font-size: .85rem; }
     </style>
 </head>
 <body>
 
-<div class="container">
+<div class="page-wrap">
 
-    <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logo" class="company-logo">
-
-    <div class="d-flex justify-content-between align-items-center mb-4">
-        <div>
-            <h4 class="mb-0">Configurações</h4>
-            <small class="text-muted">Altere os valores utilizados na validação das remessas.</small>
+    <!-- Header -->
+    <div class="page-header">
+        <div class="d-flex align-items-center gap-4">
+            <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logo" class="page-logo">
+            <div>
+                <p class="page-title">Configurações de Validação</p>
+                <p class="page-subtitle">Gerencie os valores utilizados na validação das remessas.</p>
+            </div>
         </div>
-        <a href="/" class="btn btn-outline-secondary btn-sm">← Voltar</a>
+        <div class="header-actions">
+            <a href="/configuracoes/sair" class="btn btn-outline-secondary btn-action">Sair</a>
+            <a href="/" class="btn btn-outline-secondary btn-action">Voltar</a>
+        </div>
     </div>
 
-    <!-- SEÇÃO 1: Valores por Empreendimento -->
-    <div class="section-card">
-        <div class="section-title">Valores por Empreendimento</div>
-        <p class="text-muted small mb-3">Melhoramentos e Fundo de Transporte variam por empreendimento.</p>
-        <table class="table table-sm table-hover align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Empreendimento</th>
-                    <th class="text-end">Melhoramentos (R$)</th>
-                    <th class="text-end">Fundo de Transporte (R$)</th>
-                </tr>
-            </thead>
-            <tbody id="tbody-emp"></tbody>
-        </table>
+    <!-- Seção 1: Empreendimentos -->
+    <div class="section">
+        <div class="section-header">Valores por Empreendimento</div>
+        <div class="section-body">
+            <p class="section-desc">Melhoramentos e Fundo de Transporte aplicados por empreendimento no modo Boleto.</p>
+            <table class="cfg-table">
+                <thead>
+                    <tr>
+                        <th>Empreendimento</th>
+                        <th>Melhoramentos (R$)</th>
+                        <th>Fundo de Transporte (R$)</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-emp"></tbody>
+            </table>
+        </div>
     </div>
 
-    <!-- SEÇÃO 2: Encargos Fixos Base -->
-    <div class="section-card">
-        <div class="section-title">Encargos Fixos Base</div>
-        <p class="text-muted small mb-3">Aplicados igualmente a todos os empreendimentos nos modos Boleto e Débito/Crédito.</p>
-        <table class="table table-sm table-hover align-middle mb-0">
-            <thead>
-                <tr>
-                    <th>Encargo</th>
-                    <th class="text-end">Valor (R$)</th>
-                </tr>
-            </thead>
-            <tbody id="tbody-fixos"></tbody>
-        </table>
+    <!-- Seção 2: Encargos Fixos -->
+    <div class="section">
+        <div class="section-header">Encargos Fixos Base</div>
+        <div class="section-body">
+            <p class="section-desc">Aplicados a todos os empreendimentos nos modos Boleto e Débito/Crédito. O 2º Valor é opcional — preencha apenas quando o encargo aceita dois valores distintos.</p>
+            <table class="cfg-table">
+                <thead>
+                    <tr>
+                        <th>Encargo</th>
+                        <th>1º Valor (R$)</th>
+                        <th>2º Valor (R$)</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody-fixos"></tbody>
+            </table>
+        </div>
     </div>
 
-    <!-- Botão Salvar -->
-    <div class="d-grid">
-        <button id="btn-salvar" class="btn btn-primary btn-lg" onclick="salvar()">
-            <span id="btn-texto">Salvar Configurações</span>
-        </button>
+    <!-- Salvar -->
+    <div class="save-area">
+        <p class="save-note">Os valores entram em vigor imediatamente após salvar.</p>
+        <button id="btn-salvar" class="btn-save" onclick="salvar()">Salvar Configurações</button>
     </div>
-    <p class="text-muted text-center mt-3 small">Os valores entram em vigor imediatamente para toda a equipe.</p>
+
+    <!-- Seção 3: Histórico -->
+    <div class="section">
+        <div class="section-header">
+            Histórico de Alterações
+            <button class="hist-toggle" id="hist-toggle-btn" onclick="toggleHistorico()">Exibir</button>
+        </div>
+        <div class="section-body" id="historico-wrap" style="display:none;">
+            <div id="historico-corpo"><p class="hist-empty">Carregando...</p></div>
+        </div>
+    </div>
 
 </div>
 
@@ -77,13 +268,13 @@
 <div class="toast-container">
     <div id="toast-ok" class="toast align-items-center text-bg-success border-0" role="alert">
         <div class="d-flex">
-            <div class="toast-body fw-bold">✓ Configurações salvas com sucesso!</div>
+            <div class="toast-body fw-semibold">Configurações salvas com sucesso.</div>
             <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
     </div>
     <div id="toast-erro" class="toast align-items-center text-bg-danger border-0" role="alert">
         <div class="d-flex">
-            <div class="toast-body fw-bold" id="toast-erro-msg">Erro ao salvar.</div>
+            <div class="toast-body fw-semibold" id="toast-erro-msg">Erro ao salvar.</div>
             <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast"></button>
         </div>
     </div>
@@ -94,55 +285,56 @@
     const EMP_MAP    = "__EMP_MAP__";
     const BASE_FIXOS = "__BASE_FIXOS__";
 
-    // Popula tabela de empreendimentos
+    // --- Popula tabela de empreendimentos ---
     const tbodyEmp = document.getElementById('tbody-emp');
     for (const [emp, vals] of Object.entries(EMP_MAP)) {
         tbodyEmp.insertAdjacentHTML('beforeend', `
             <tr>
-                <td><span class="badge-emp">${emp}</span></td>
-                <td class="text-end">
-                    <input type="number" step="0.01" min="0" id="emp_${emp}_melh" value="${vals['Melhoramentos'].toFixed(2)}">
-                </td>
-                <td class="text-end">
-                    <input type="number" step="0.01" min="0" id="emp_${emp}_fundo" value="${vals['Fundo de Transporte'].toFixed(2)}">
-                </td>
+                <td><span class="emp-code">${emp}</span></td>
+                <td><input type="number" step="0.01" min="0" class="cfg-input" id="emp_${emp}_melh" value="${vals['Melhoramentos'].toFixed(2)}"></td>
+                <td><input type="number" step="0.01" min="0" class="cfg-input" id="emp_${emp}_fundo" value="${vals['Fundo de Transporte'].toFixed(2)}"></td>
             </tr>`);
     }
 
-    // Popula tabela de encargos fixos
+    // --- Popula tabela de encargos fixos ---
     const tbodyFixos = document.getElementById('tbody-fixos');
-    for (const [nome, val] of Object.entries(BASE_FIXOS)) {
-        const id = 'fixo_' + nome.replace(/[^a-zA-Z0-9]/g, '_');
+    for (const [nome, vals] of Object.entries(BASE_FIXOS)) {
+        const arr = Array.isArray(vals) ? vals : [vals];
+        const v1  = parseFloat(arr[0] ?? 0);
+        const v2  = arr.length > 1 ? parseFloat(arr[1]) : null;
         tbodyFixos.insertAdjacentHTML('beforeend', `
-            <tr>
+            <tr data-nome="${nome}">
                 <td>${nome}</td>
-                <td class="text-end">
-                    <input type="number" step="0.01" min="0" id="${id}" data-nome="${nome}" value="${parseFloat(val).toFixed(2)}">
-                </td>
+                <td><input type="number" step="0.01" min="0" class="cfg-input val1" data-nome="${nome}" value="${v1.toFixed(2)}"></td>
+                <td><input type="number" step="0.01" min="0" class="cfg-input val2" placeholder="—" ${v2 !== null ? `value="${v2.toFixed(2)}"` : ''}></td>
             </tr>`);
     }
 
+    // --- Coleta dados para envio ---
     function coletarDados() {
         const empMap = {};
         for (const emp of Object.keys(EMP_MAP)) {
             empMap[emp] = {
-                "Melhoramentos":    parseFloat(document.getElementById(`emp_${emp}_melh`).value),
+                "Melhoramentos":       parseFloat(document.getElementById(`emp_${emp}_melh`).value),
                 "Fundo de Transporte": parseFloat(document.getElementById(`emp_${emp}_fundo`).value),
             };
         }
         const baseFixos = {};
-        document.querySelectorAll('#tbody-fixos input[type="number"]').forEach(inp => {
-            baseFixos[inp.dataset.nome] = parseFloat(inp.value);
+        document.querySelectorAll('#tbody-fixos tr').forEach(tr => {
+            const nome  = tr.dataset.nome;
+            const v1    = parseFloat(tr.querySelector('.val1').value) || 0;
+            const v2raw = tr.querySelector('.val2').value;
+            const v2    = v2raw !== '' ? (parseFloat(v2raw) || 0) : null;
+            baseFixos[nome] = (v2 !== null && v2 > 0) ? [v1, v2] : [v1];
         });
         return { EMP_MAP: empMap, BASE_FIXOS: baseFixos };
     }
 
+    // --- Salvar ---
     async function salvar() {
-        const btn  = document.getElementById('btn-salvar');
-        const txt  = document.getElementById('btn-texto');
+        const btn = document.getElementById('btn-salvar');
         btn.disabled = true;
-        txt.textContent = 'Salvando...';
-
+        btn.textContent = 'Salvando...';
         try {
             const resp = await fetch('/configuracoes/salvar', {
                 method: 'POST',
@@ -152,16 +344,69 @@
             const data = await resp.json();
             if (data.ok) {
                 new bootstrap.Toast(document.getElementById('toast-ok'), { delay: 3000 }).show();
+                historicoCarregado = false;
             } else {
                 document.getElementById('toast-erro-msg').textContent = 'Erro: ' + (data.erro || 'desconhecido');
                 new bootstrap.Toast(document.getElementById('toast-erro'), { delay: 4000 }).show();
             }
-        } catch (e) {
+        } catch {
             document.getElementById('toast-erro-msg').textContent = 'Falha na requisição.';
             new bootstrap.Toast(document.getElementById('toast-erro'), { delay: 4000 }).show();
         } finally {
             btn.disabled = false;
-            txt.textContent = 'Salvar Configurações';
+            btn.textContent = 'Salvar Configurações';
+        }
+    }
+
+    // --- Histórico ---
+    let historicoAberto   = false;
+    let historicoCarregado = false;
+
+    async function toggleHistorico() {
+        historicoAberto = !historicoAberto;
+        const wrap = document.getElementById('historico-wrap');
+        const btn  = document.getElementById('hist-toggle-btn');
+        wrap.style.display = historicoAberto ? 'block' : 'none';
+        btn.textContent    = historicoAberto ? 'Ocultar' : 'Exibir';
+        if (!historicoAberto || historicoCarregado) return;
+
+        try {
+            const hist = await fetch('/configuracoes/historico').then(r => r.json());
+            const div  = document.getElementById('historico-corpo');
+
+            if (!hist.length) {
+                div.innerHTML = '<p class="hist-empty">Nenhuma alteracao registrada.</p>';
+                historicoCarregado = true;
+                return;
+            }
+
+            let rows = '';
+            hist.forEach(entry => {
+                entry.alteracoes.forEach((a, i) => {
+                    rows += `<tr>
+                        <td class="hist-date">${i === 0 ? entry.data : ''}</td>
+                        <td class="hist-campo">${a.campo}</td>
+                        <td class="val-antes">${a.antes}</td>
+                        <td class="val-depois">${a.depois}</td>
+                    </tr>`;
+                });
+            });
+
+            div.innerHTML = `
+                <table class="hist-table">
+                    <thead>
+                        <tr>
+                            <th style="width:130px">Data / Hora</th>
+                            <th style="text-align:left">Campo</th>
+                            <th>Valor Anterior</th>
+                            <th>Novo Valor</th>
+                        </tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>`;
+            historicoCarregado = true;
+        } catch {
+            document.getElementById('historico-corpo').innerHTML = '<p class="hist-empty" style="color:#c0392b">Erro ao carregar histórico.</p>';
         }
     }
 </script>

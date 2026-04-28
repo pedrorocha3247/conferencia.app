@@ -6,7 +6,7 @@ import io
 import fitz  # PyMuPDF
 import pandas as pd
 from collections import OrderedDict, Counter # Importa o Counter
-from flask import Flask, request, send_file, url_for, make_response, jsonify
+from flask import Flask, request, send_file, url_for, make_response, jsonify, session, redirect
 import json
 import traceback
 import openpyxl
@@ -16,6 +16,7 @@ from openpyxl.utils import get_column_letter
 from copy import copy
 import zipfile
 import time # Importado para logs
+from datetime import datetime
 
 # ==== Constantes e Mapeamentos ====
 DASHES = dict.fromkeys(map(ord, "\u2010\u2011\u2012\u2013\u2014\u2015\u2212"), "-")
@@ -67,6 +68,9 @@ BASE_FIXOS_CCB = {
 }
 
 app = Flask(__name__)
+app.secret_key = os.environ.get('SECRET_KEY', 'kasil-validador-chave-interna')
+CONFIG_SENHA   = os.environ.get('CONFIG_SENHA', 'kasil2025')
+
 # Define UPLOAD_FOLDER como um caminho absoluto relativo à raiz do app
 UPLOAD_FOLDER_PATH = os.path.join(app.root_path, 'uploads')
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER_PATH
@@ -92,11 +96,11 @@ CONFIG_PADRAO = {
         "SBRRIII":{"Melhoramentos": 245.47, "Fundo de Transporte": 13.00},
     },
     "BASE_FIXOS": {
-        "Taxa de Conservação":           434.11,
-        "Contrib. Social SLIM":          321.00,
-        "Contribuição ABRASMA - Bronze":  20.00,
-        "Contribuição ABRASMA - Prata":   40.00,
-        "Contribuição ABRASMA - Ouro":    60.00,
+        "Taxa de Conservação":           [434.11],
+        "Contrib. Social SLIM":          [321.00, 107.00],
+        "Contribuição ABRASMA - Bronze": [20.00],
+        "Contribuição ABRASMA - Prata":  [40.00],
+        "Contribuição ABRASMA - Ouro":   [60.00],
     }
 }
 
@@ -107,7 +111,40 @@ def carregar_config() -> dict:
     except (FileNotFoundError, json.JSONDecodeError):
         return {k: dict(v) for k, v in CONFIG_PADRAO.items()}
 
+HISTORY_PATH = os.path.join(app.root_path, 'config_historico.json')
+
+def carregar_historico() -> list:
+    try:
+        with open(HISTORY_PATH, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (FileNotFoundError, json.JSONDecodeError):
+        return []
+
+def _fmt_val(v):
+    if isinstance(v, list):
+        return ' / '.join(f'R$ {float(x):.2f}' for x in v)
+    return f'R$ {float(v):.2f}'
+
+def _detectar_alteracoes(antigo: dict, novo: dict) -> list:
+    diffs = []
+    for emp, vals in novo.get('EMP_MAP', {}).items():
+        for campo, novo_val in vals.items():
+            ant = antigo.get('EMP_MAP', {}).get(emp, {}).get(campo)
+            if ant is not None and round(float(ant), 2) != round(float(novo_val), 2):
+                diffs.append({'campo': f'{emp} — {campo}', 'antes': _fmt_val(ant), 'depois': _fmt_val(novo_val)})
+    for nome, novo_val in novo.get('BASE_FIXOS', {}).items():
+        ant = antigo.get('BASE_FIXOS', {}).get(nome)
+        if ant is not None and ant != novo_val:
+            diffs.append({'campo': nome, 'antes': _fmt_val(ant), 'depois': _fmt_val(novo_val)})
+    return diffs
+
 def salvar_config(config: dict):
+    alteracoes = _detectar_alteracoes(carregar_config(), config)
+    if alteracoes:
+        hist = carregar_historico()
+        hist.insert(0, {'data': datetime.now().strftime('%d/%m/%Y %H:%M'), 'alteracoes': alteracoes})
+        with open(HISTORY_PATH, 'w', encoding='utf-8') as f:
+            json.dump(hist[:50], f, ensure_ascii=False, indent=2)
     with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
 
@@ -213,7 +250,7 @@ def fixos_do_emp(emp: str, modo_separacao: str):
     """Retorna o dicionário de parcelas fixas esperadas com base no empreendimento e modo."""
     cfg = carregar_config()
     emp_map   = cfg.get('EMP_MAP', CONFIG_PADRAO['EMP_MAP'])
-    base_fixos = {k: [float(v)] for k, v in cfg.get('BASE_FIXOS', CONFIG_PADRAO['BASE_FIXOS']).items()}
+    base_fixos = {k: ([float(x) for x in v] if isinstance(v, list) else [float(v)]) for k, v in cfg.get('BASE_FIXOS', CONFIG_PADRAO['BASE_FIXOS']).items()}
 
     if modo_separacao == 'boleto':
         if emp not in emp_map:
@@ -1496,8 +1533,20 @@ def repasse_abrasma_file():
             error_message=f"Ocorreu um erro grave durante a análise. Detalhes: {error_details}")
 
 
+@app.route('/configuracoes/login', methods=['GET', 'POST'])
+def configuracoes_login():
+    erro_html = ''
+    if request.method == 'POST':
+        if request.form.get('senha') == CONFIG_SENHA:
+            session['config_auth'] = True
+            return redirect('/configuracoes')
+        erro_html = '<div class="alert-erro">Senha incorreta. Verifique e tente novamente.</div>'
+    return manual_render_template('configuracoes_login.html', erro=erro_html)
+
 @app.route('/configuracoes')
 def configuracoes():
+    if not session.get('config_auth'):
+        return redirect('/configuracoes/login')
     cfg = carregar_config()
     return manual_render_template(
         'configuracoes.html',
@@ -1505,12 +1554,28 @@ def configuracoes():
         base_fixos=json.dumps(cfg.get('BASE_FIXOS', CONFIG_PADRAO['BASE_FIXOS']), ensure_ascii=False),
     )
 
+@app.route('/configuracoes/historico')
+def configuracoes_historico():
+    if not session.get('config_auth'):
+        return jsonify([])
+    return jsonify(carregar_historico())
+
+@app.route('/configuracoes/sair')
+def configuracoes_sair():
+    session.pop('config_auth', None)
+    return redirect('/')
+
 @app.route('/configuracoes/salvar', methods=['POST'])
 def configuracoes_salvar():
+    if not session.get('config_auth'):
+        return jsonify({'ok': False, 'erro': 'Não autorizado.'}), 401
     try:
         data = request.get_json(force=True)
-        emp_map   = {k: {"Melhoramentos": float(v["Melhoramentos"]), "Fundo de Transporte": float(v["Fundo de Transporte"])} for k, v in data.get('EMP_MAP', {}).items()}
-        base_fixos = {k: float(v) for k, v in data.get('BASE_FIXOS', {}).items()}
+        emp_map = {k: {"Melhoramentos": float(v["Melhoramentos"]), "Fundo de Transporte": float(v["Fundo de Transporte"])} for k, v in data.get('EMP_MAP', {}).items()}
+        base_fixos = {}
+        for k, v in data.get('BASE_FIXOS', {}).items():
+            vals = [float(x) for x in v if x is not None and float(x) > 0] if isinstance(v, list) else ([float(v)] if v else [])
+            base_fixos[k] = vals
         salvar_config({"EMP_MAP": emp_map, "BASE_FIXOS": base_fixos})
         return jsonify({'ok': True})
     except Exception as e:
