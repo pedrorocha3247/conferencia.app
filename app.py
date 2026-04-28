@@ -51,7 +51,7 @@ EMP_MAP = {
 }
 BASE_FIXOS = {
     "Taxa de Conservação": [434.11],
-    "Contrib. Social SLIM": [321.00],
+    "Contrib. Social SLIM": [107.00,321.00],
     "Contribuição ABRASMA - Bronze": [20.00],
     "Contribuição ABRASMA - Prata": [40.00],
     "Contribuição ABRASMA - Ouro": [60.00],
