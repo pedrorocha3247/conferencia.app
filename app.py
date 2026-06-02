@@ -16,6 +16,8 @@ from openpyxl.utils import get_column_letter
 from copy import copy
 import zipfile
 import time # Importado para logs
+import base64
+import requests
 from datetime import datetime
 
 # ==== Constantes e Mapeamentos ====
@@ -70,6 +72,64 @@ BASE_FIXOS_CCB = {
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'kasil-validador-chave-interna')
 CONFIG_SENHA   = os.environ.get('CONFIG_SENHA', 'kasil2025')
+
+# ==== Integração GitHub (commit automático do config.json) ====
+# Configure estas variáveis de ambiente no Render para ativar:
+#   GITHUB_TOKEN        -> token de acesso (fine-grained PAT, Contents: Read & Write)
+#   GITHUB_REPO         -> "usuario/repositorio" (ex: "pedrorocha3247/conferencia.app")
+#   GITHUB_BRANCH       -> branch alvo (padrão: "main")
+#   GITHUB_CONFIG_PATH  -> caminho do config.json no repo (padrão: "config.json")
+GITHUB_TOKEN       = os.environ.get('GITHUB_TOKEN', '')
+GITHUB_REPO        = os.environ.get('GITHUB_REPO', '')
+GITHUB_BRANCH      = os.environ.get('GITHUB_BRANCH', 'main')
+GITHUB_CONFIG_PATH = os.environ.get('GITHUB_CONFIG_PATH', 'config.json')
+
+def github_configurado() -> bool:
+    return bool(GITHUB_TOKEN and GITHUB_REPO)
+
+def commitar_config_github(config: dict, alteracoes: list = None):
+    """Comita o config.json no GitHub. Retorna (ok: bool, mensagem: str)."""
+    if not github_configurado():
+        return False, 'GitHub não configurado (variáveis de ambiente ausentes).'
+    api_url = f'https://api.github.com/repos/{GITHUB_REPO}/contents/{GITHUB_CONFIG_PATH}'
+    headers = {
+        'Authorization': f'Bearer {GITHUB_TOKEN}',
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28',
+    }
+    try:
+        # 1. Busca o SHA atual do arquivo (necessário para atualizar)
+        sha = None
+        r_get = requests.get(api_url, headers=headers, params={'ref': GITHUB_BRANCH}, timeout=15)
+        if r_get.status_code == 200:
+            sha = r_get.json().get('sha')
+        elif r_get.status_code != 404:
+            return False, f'Falha ao consultar GitHub ({r_get.status_code}): {r_get.text[:200]}'
+
+        # 2. Monta a mensagem do commit
+        if alteracoes:
+            resumo = '; '.join(a['campo'] for a in alteracoes[:3])
+            if len(alteracoes) > 3:
+                resumo += f' (+{len(alteracoes) - 3})'
+            msg = f'Config via painel: {resumo}'
+        else:
+            msg = 'Atualização de configuração via painel'
+
+        # 3. Envia o novo conteúdo
+        conteudo_b64 = base64.b64encode(
+            json.dumps(config, ensure_ascii=False, indent=2).encode('utf-8')
+        ).decode('utf-8')
+        payload = {'message': msg, 'content': conteudo_b64, 'branch': GITHUB_BRANCH}
+        if sha:
+            payload['sha'] = sha
+        r_put = requests.put(api_url, headers=headers, json=payload, timeout=15)
+        if r_put.status_code in (200, 201):
+            print(f"[GITHUB] config.json comitado em {GITHUB_REPO}@{GITHUB_BRANCH}.")
+            return True, 'Configuração versionada no GitHub.'
+        return False, f'Falha ao comitar ({r_put.status_code}): {r_put.text[:200]}'
+    except Exception as e:
+        print(f"[GITHUB] ERRO ao comitar config: {e}")
+        return False, str(e)
 
 # Define UPLOAD_FOLDER como um caminho absoluto relativo à raiz do app
 UPLOAD_FOLDER_PATH = os.path.join(app.root_path, 'uploads')
@@ -158,6 +218,7 @@ def salvar_config(config: dict):
         json.dump(config, f, ensure_ascii=False, indent=2)
     os.replace(tmp_cfg, CONFIG_PATH)
     print(f"[CONFIG] config.json salvo em '{CONFIG_PATH}'. {len(alteracoes)} alteração(ões) detectada(s).")
+    return alteracoes
 
 def manual_render_template(template_name, status_code=200, **kwargs):
     template_path = os.path.join(app.root_path, 'templates', template_name)
@@ -1588,12 +1649,16 @@ def configuracoes_salvar():
             vals = [float(x) for x in v if x is not None and float(x) > 0] if isinstance(v, list) else ([float(v)] if v else [])
             base_fixos[k] = vals
         nova_config = {"EMP_MAP": emp_map, "BASE_FIXOS": base_fixos}
-        salvar_config(nova_config)
+        alteracoes = salvar_config(nova_config)
         # Verificação pós-gravação
         cfg_lido = carregar_config()
         ok = cfg_lido.get('EMP_MAP') == emp_map
         print(f"[CONFIG] Verificação pós-save: EMP_MAP correto={ok}, arquivo existe={os.path.exists(CONFIG_PATH)}")
-        return jsonify({'ok': True})
+        # Commit automático no GitHub (torna a mudança permanente)
+        github_ok, github_msg = False, 'GitHub não configurado.'
+        if github_configurado():
+            github_ok, github_msg = commitar_config_github(nova_config, alteracoes)
+        return jsonify({'ok': True, 'github_ok': github_ok, 'github_msg': github_msg})
     except Exception as e:
         print(f"[CONFIG] ERRO ao salvar: {e}")
         return jsonify({'ok': False, 'erro': str(e)}), 500
