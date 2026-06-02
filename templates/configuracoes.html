@@ -345,7 +345,7 @@
             if (data.ok) {
                 let msg = 'Configurações salvas com sucesso.';
                 if (data.github_ok) {
-                    msg = 'Salvo e versionado no GitHub. O sistema será atualizado em alguns minutos.';
+                    msg = 'Valores salvos. O sistema será atualizado em alguns minutos.';
                 } else if (data.github_msg && !data.github_msg.includes('não configurado')) {
                     msg = 'Salvo localmente, mas falhou ao versionar no GitHub: ' + data.github_msg;
                 }
