@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Resultados da Validação</title>
+<link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.datatables.net/1.13.6/css/dataTables.bootstrap5.min.css">
+<style>
+  body { padding-bottom: 50px; }
+  .card { border: none; }
+  .header-logo { max-height: 50px; width: auto; }
+  .summary-item strong { text-transform: uppercase; }
+</style>
+</head>
+<body>
+<div class="container-fluid mt-4 px-4">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logótipo da Empresa" class="header-logo">
+        <a href="/" class="btn btn-secondary">Analisar Novo Arquivo</a>
+    </div>
+    <div class="card mb-4">
+        <div class="card-body">
+            <h5 class="card-title mb-3">Resumo da Análise</h5>
+            <div class="row text-center">
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Modo de Análise</strong>
+                    <div><span class="badge bg-primary fs-6 mt-1">__MODO_USADO__</span></div>
+                </div>
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Total de Lotes Processados</strong>
+                    <div><span class="badge bg-secondary fs-6 mt-1">__TOTAL_LOTES__</span></div>
+                </div>
+                <div class="col-md summary-item border-end border-secondary">
+                    <strong>Total de Divergências</strong>
+                    <div><span class="badge bg-danger fs-6 mt-1">__TOTAL_DIVERGENCIAS__</span></div>
+                </div>
+                <div class="col-md summary-item">
+                    <strong>Não Classificados</strong>
+                    <div><span class="badge bg-warning fs-6 mt-1">__NAO_CLASSIFICADOS__</span></div>
+                </div>
+            </div>
+            <hr>
+            <a href="__DOWNLOAD_URL__" class="btn btn-success">Baixar Relatório Completo (.xlsx)</a>
+        </div>
+    </div>
+    <div class="card">
+        <div class="card-header"><h4>Tabela de Divergências</h4></div>
+        <div class="card-body">
+            <table id="tabela-divergencias" class="table table-striped" style="width:100%"></table>
+        </div>
+    </div>
+</div>
+<script src="https://code.jquery.com/jquery-3.7.0.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/jquery.dataTables.min.js"></script>
+<script src="https://cdn.datatables.net/1.13.6/js/dataTables.bootstrap5.min.js"></script>
+<script>
+$(document).ready(function() {
+    const ptBrLang = { "url": "//cdn.datatables.net/plug-ins/1.13.6/i18n/pt-BR.json" };
+    function toTitleCase(str) {
+        return str.replace(/_/g, ' ').replace(/\w\S*/g, (txt) => txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase());
+    }
+    const divergenciasData = "__DIVERGENCIAS_JSON__";
+    if (divergenciasData && divergenciasData.data && divergenciasData.data.length > 0) {
+        const columns = divergenciasData.columns.map(col => ({ title: toTitleCase(col) }));
+        $('#tabela-divergencias').DataTable({
+            data: divergenciasData.data,
+            columns: columns,
+            language: ptBrLang
+        });
+    } else {
+        $('#tabela-divergencias').parent().html('<p class="text-center p-3">Nenhuma divergência encontrada.</p>');
+    }
+});
+</script>
+</body>
+</html>

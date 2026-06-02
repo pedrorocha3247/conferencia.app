@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="pt-BR" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Acesso Restrito — Configurações</title>
+    <link href="https://bootswatch.com/5/cyborg/bootstrap.min.css" rel="stylesheet">
+    <style>
+        html, body {
+            height: 100%;
+            background-color: #1a1f24;
+        }
+        body {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .login-wrap {
+            width: 100%;
+            max-width: 400px;
+            padding: 1rem;
+        }
+        .login-logo {
+            display: block;
+            margin: 0 auto 2rem auto;
+            max-height: 64px;
+            width: auto;
+        }
+        .login-card {
+            background-color: #242a31;
+            border: 1px solid #37404a;
+            border-radius: .5rem;
+            padding: 2.25rem 2rem;
+        }
+        .login-title {
+            font-size: 1rem;
+            font-weight: 600;
+            color: #e9ecef;
+            margin-bottom: .25rem;
+        }
+        .login-subtitle {
+            font-size: .825rem;
+            color: #6c757d;
+            margin-bottom: 1.75rem;
+            border-bottom: 1px solid #37404a;
+            padding-bottom: 1.25rem;
+        }
+        .form-label {
+            font-size: .8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .06em;
+            color: #adb5bd;
+        }
+        .form-control {
+            background-color: #1a1f24;
+            border-color: #37404a;
+            color: #e9ecef;
+            font-size: .95rem;
+        }
+        .form-control:focus {
+            background-color: #1a1f24;
+            border-color: #2b90d9;
+            color: #e9ecef;
+            box-shadow: 0 0 0 2px rgba(43, 144, 217, .2);
+        }
+        .btn-acessar {
+            background-color: #2b90d9;
+            border: none;
+            font-weight: 600;
+            letter-spacing: .03em;
+            padding: .65rem;
+        }
+        .btn-acessar:hover { background-color: #2279ba; }
+        .link-voltar {
+            display: block;
+            text-align: center;
+            margin-top: 1.25rem;
+            font-size: .825rem;
+            color: #6c757d;
+            text-decoration: none;
+        }
+        .link-voltar:hover { color: #adb5bd; }
+        .alert-erro {
+            background-color: rgba(220, 53, 69, .12);
+            border: 1px solid rgba(220, 53, 69, .35);
+            border-radius: .375rem;
+            color: #f08090;
+            font-size: .825rem;
+            padding: .6rem .85rem;
+            margin-top: .75rem;
+        }
+    </style>
+</head>
+<body>
+
+<div class="login-wrap">
+
+    <img src="https://i.postimg.cc/k52qrH0Z/Imagem1.png" alt="Logo" class="login-logo">
+
+    <div class="login-card">
+        <p class="login-title">Configurações — Acesso Restrito</p>
+        <p class="login-subtitle">Esta área é protegida. Insira a senha de administrador para continuar.</p>
+
+        <form method="POST" action="/configuracoes/login" autocomplete="off">
+            <div class="mb-3">
+                <label for="senha" class="form-label">Senha de acesso</label>
+                <input type="password" class="form-control" id="senha" name="senha"
+                       placeholder="Digite a senha" autofocus>
+            </div>
+
+            __ERRO__
+
+            <div class="d-grid mt-3">
+                <button type="submit" class="btn btn-acessar">Acessar</button>
+            </div>
+        </form>
+    </div>
+
+    <a href="/" class="link-voltar">Retornar ao validador</a>
+
+</div>
+
+</body>
+</html>
