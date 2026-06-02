@@ -79,6 +79,7 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 print(f"Pasta de Upload configurada em: {app.config['UPLOAD_FOLDER']}")
 
 CONFIG_PATH = os.path.join(app.root_path, 'config.json')
+print(f"[CONFIG] Caminho do config.json: {CONFIG_PATH}")
 
 CONFIG_PADRAO = {
     "EMP_MAP": {
@@ -107,8 +108,13 @@ CONFIG_PADRAO = {
 def carregar_config() -> dict:
     try:
         with open(CONFIG_PATH, 'r', encoding='utf-8') as f:
-            return json.load(f)
-    except (FileNotFoundError, json.JSONDecodeError):
+            cfg = json.load(f)
+            return cfg
+    except FileNotFoundError:
+        print(f"[CONFIG] config.json não encontrado em '{CONFIG_PATH}'. Usando padrão.")
+        return {k: dict(v) for k, v in CONFIG_PADRAO.items()}
+    except json.JSONDecodeError as e:
+        print(f"[CONFIG] ERRO ao ler config.json (JSON inválido): {e}. Usando padrão.")
         return {k: dict(v) for k, v in CONFIG_PADRAO.items()}
 
 HISTORY_PATH = os.path.join(app.root_path, 'config_historico.json')
@@ -143,10 +149,15 @@ def salvar_config(config: dict):
     if alteracoes:
         hist = carregar_historico()
         hist.insert(0, {'data': datetime.now().strftime('%d/%m/%Y %H:%M'), 'alteracoes': alteracoes})
-        with open(HISTORY_PATH, 'w', encoding='utf-8') as f:
+        tmp_hist = HISTORY_PATH + '.tmp'
+        with open(tmp_hist, 'w', encoding='utf-8') as f:
             json.dump(hist[:50], f, ensure_ascii=False, indent=2)
-    with open(CONFIG_PATH, 'w', encoding='utf-8') as f:
+        os.replace(tmp_hist, HISTORY_PATH)
+    tmp_cfg = CONFIG_PATH + '.tmp'
+    with open(tmp_cfg, 'w', encoding='utf-8') as f:
         json.dump(config, f, ensure_ascii=False, indent=2)
+    os.replace(tmp_cfg, CONFIG_PATH)
+    print(f"[CONFIG] config.json salvo em '{CONFIG_PATH}'. {len(alteracoes)} alteração(ões) detectada(s).")
 
 def manual_render_template(template_name, status_code=200, **kwargs):
     template_path = os.path.join(app.root_path, 'templates', template_name)
@@ -1576,10 +1587,28 @@ def configuracoes_salvar():
         for k, v in data.get('BASE_FIXOS', {}).items():
             vals = [float(x) for x in v if x is not None and float(x) > 0] if isinstance(v, list) else ([float(v)] if v else [])
             base_fixos[k] = vals
-        salvar_config({"EMP_MAP": emp_map, "BASE_FIXOS": base_fixos})
+        nova_config = {"EMP_MAP": emp_map, "BASE_FIXOS": base_fixos}
+        salvar_config(nova_config)
+        # Verificação pós-gravação
+        cfg_lido = carregar_config()
+        ok = cfg_lido.get('EMP_MAP') == emp_map
+        print(f"[CONFIG] Verificação pós-save: EMP_MAP correto={ok}, arquivo existe={os.path.exists(CONFIG_PATH)}")
         return jsonify({'ok': True})
     except Exception as e:
+        print(f"[CONFIG] ERRO ao salvar: {e}")
         return jsonify({'ok': False, 'erro': str(e)}), 500
+
+@app.route('/configuracoes/verificar')
+def configuracoes_verificar():
+    if not session.get('config_auth'):
+        return jsonify({'erro': 'Não autorizado.'}), 401
+    cfg = carregar_config()
+    return jsonify({
+        'config_path': CONFIG_PATH,
+        'arquivo_existe': os.path.exists(CONFIG_PATH),
+        'tamanho_bytes': os.path.getsize(CONFIG_PATH) if os.path.exists(CONFIG_PATH) else 0,
+        'config': cfg,
+    })
 
 @app.route('/download/<filename>')
 def download_file(filename):
